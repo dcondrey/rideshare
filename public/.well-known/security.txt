@@ -1,0 +1,26 @@
+# RFC 9116 security.txt for the rideshare deployment.
+#
+# Operators MUST customise the placeholder URLs and the email below before
+# deploying this file publicly. At minimum, replace `example.com` with your
+# actual deployment hostname and `security@example.com` with a real reporting
+# address.
+#
+# Serving: this file is at public/.well-known/security.txt. The deployment
+# needs a route to serve it at /.well-known/security.txt — extend
+# routes/well-known.js (which already serves /.well-known/did.json) to also
+# serve this file with Content-Type text/plain. A minimal handler is:
+#
+#   if (url === '/.well-known/security.txt') {
+#     return serveStatic('public/.well-known/security.txt', 'text/plain')
+#   }
+#
+# Update the Expires line at least annually; RFC 9116 §2.5.5 requires a value
+# no more than one year in the future.
+
+Contact: mailto:security@example.com
+Expires: 2027-05-01T00:00:00Z
+Encryption: https://example.com/pgp-key.txt
+Acknowledgments: https://example.com/security/hall-of-fame
+Preferred-Languages: en
+Canonical: https://example.com/.well-known/security.txt
+Policy: https://example.com/SECURITY.md

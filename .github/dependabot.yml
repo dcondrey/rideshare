@@ -1,0 +1,78 @@
+# Dependabot configuration.
+#
+# Two ecosystems matter here:
+#   1. github-actions — keep CI action versions current (security patches in actions/checkout etc.)
+#   2. npm           — we have ZERO runtime deps today, but devDeps (Biome, TypeScript) will appear.
+#                      Group them so we get one PR per week instead of one per package.
+#
+# Cadence is weekly + Monday morning UTC so PRs land before the team starts triage.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      # All GitHub-published actions update together; they release in lockstep.
+      github-official-actions:
+        patterns:
+          - 'actions/*'
+          - 'github/*'
+      # Everything else (third-party actions) groups separately so we can review more carefully.
+      third-party-actions:
+        patterns:
+          - '*'
+        exclude-patterns:
+          - 'actions/*'
+          - 'github/*'
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+    commit-message:
+      prefix: deps
+      include: scope
+    # Conservative: ignore major bumps by default. Major upgrades require a human-driven PR
+    # because they often imply API/behavior changes (Biome 2 -> 3, TypeScript 5 -> 6, etc.).
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
+    groups:
+      # Lint/format toolchain.
+      biome:
+        patterns:
+          - '@biomejs/*'
+      # Type-checking toolchain — bundled together so a PR contains the whole TS upgrade story.
+      typescript:
+        patterns:
+          - 'typescript'
+          - '@types/*'
+          - 'ts-*'
+      # Anything else that might appear in devDeps (test helpers, etc.) — single weekly PR.
+      dev-misc:
+        patterns:
+          - '*'
+        exclude-patterns:
+          - '@biomejs/*'
+          - 'typescript'
+          - '@types/*'
+          - 'ts-*'

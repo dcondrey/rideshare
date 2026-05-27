@@ -1,0 +1,201 @@
+# CI pipeline: every PR and every push to main.
+# Goal: fast (<5 min wall-clock), parallel by default, every job/step named for at-a-glance review.
+# Project has zero runtime npm dependencies, so test/lint/typecheck/check jobs skip `npm install`
+# and use `npx --yes` for the few dev tools (Biome, TypeScript). License/banned-pattern/dep checks
+# are pure Node scripts under scripts/ — no install needed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref so a fast-follow push doesn't waste minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Principle of least privilege: read-only by default. Individual jobs can opt in if they need more.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Checkout repository
+        # Pinned to v4.2.2 (2024-10-23) — bumping requires reviewing release notes.
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js ${{ matrix.node }}
+        # actions/setup-node v4.4.0 (2025-04-22).
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Print Node version
+        # Confirms the matrix entry actually activated, useful when debugging a flake on one row.
+        run: node --version
+
+      - name: Run unit, fuzz, and integration tests
+        # Built-in test runner; no install step because we have zero deps.
+        run: node --test tests/unit tests/fuzz tests/integration
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Install devDependencies (only if a package-lock or non-empty devDeps exist)
+        # `npm ci` requires a lockfile; fall back to `npm install` if devDeps exist without one.
+        # Skip entirely when there are no devDependencies — keeps the no-install fast path intact.
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund --ignore-scripts
+          elif node -e "process.exit(Object.keys(require('./package.json').devDependencies||{}).length?0:1)"; then
+            npm install --no-audit --no-fund --ignore-scripts --no-save
+          else
+            echo "No devDependencies present; skipping install."
+          fi
+
+      - name: Run TypeScript in --noEmit mode
+        # Pinned to TS 5 line via npx so we never silently jump major versions.
+        run: npx --yes typescript@5 tsc --noEmit -p tsconfig.json
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Run Biome CI (lint + format check + import sort)
+        # `biome ci` is the strict, non-fixing mode meant for CI — fails on any diff.
+        run: npx --yes @biomejs/biome@2 ci .
+
+  license-headers:
+    name: license-headers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Verify every source file carries the SPDX license header
+        run: node scripts/check-license-headers.mjs
+
+  banned-patterns:
+    name: banned-patterns
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Scan for banned patterns (debugger/console.log/TODO-without-issue/etc.)
+        run: node scripts/check-no-banned-patterns.mjs
+
+  zero-runtime-deps:
+    name: zero-runtime-deps
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Assert package.json has no `dependencies` (runtime deps)
+        # Hard rule: this project ships with zero runtime dependencies. Dev-only is fine.
+        run: node scripts/check-zero-runtime-deps.mjs
+
+  schema-vs-tests:
+    name: schema-vs-tests (boot smoke)
+    runs-on: ubuntu-latest
+    # Even if other checks fail elsewhere, we want a clear signal that the server can boot at all.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Boot the server in the background and curl /health (fall back to /)
+        # We boot whichever entry script exists, wait up to 20s for the port to open, then probe.
+        # /health is preferred; if 404, we accept a 200 from /. Anything else fails the job.
+        env:
+          PORT: '8080'
+          NODE_ENV: 'test'
+        run: |
+          set -euo pipefail
+
+          ENTRY=""
+          for candidate in server.mjs server.js src/server.mjs src/server.js index.mjs index.js src/index.mjs src/index.js; do
+            if [ -f "$candidate" ]; then ENTRY="$candidate"; break; fi
+          done
+          if [ -z "$ENTRY" ]; then
+            echo "::error::No server entry file found (looked for server.{mjs,js}, src/server.{mjs,js}, index.{mjs,js}, src/index.{mjs,js})."
+            exit 1
+          fi
+          echo "Booting $ENTRY on port $PORT"
+
+          node "$ENTRY" > server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+
+          # Wait for the port to start accepting connections (max ~20s).
+          for i in $(seq 1 40); do
+            if (echo > /dev/tcp/127.0.0.1/$PORT) >/dev/null 2>&1; then
+              echo "Port $PORT is open after ${i} attempts."
+              break
+            fi
+            sleep 0.5
+          done
+
+          # Try /health first; if it 404s, fall back to /.
+          STATUS_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/health" || echo "000")
+          echo "GET /health -> $STATUS_HEALTH"
+          if [ "$STATUS_HEALTH" = "200" ]; then
+            echo "Smoke check passed via /health."
+            exit 0
+          fi
+
+          STATUS_ROOT=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/" || echo "000")
+          echo "GET / -> $STATUS_ROOT"
+          if [ "$STATUS_ROOT" = "200" ]; then
+            echo "Smoke check passed via /."
+            exit 0
+          fi
+
+          echo "::error::Server did not return 200 from /health or /. Server log follows:"
+          sed -n '1,200p' server.log || true
+          exit 1

@@ -1,0 +1,18 @@
+{
+  "_comment": "Base58btc (Bitcoin alphabet) reference vectors. Bytes are hex-encoded.",
+  "_source": "https://github.com/bitcoin/bitcoin/blob/master/src/test/data/base58_encode_decode.json (curated subset) + W3C did:key examples",
+  "vectors": [
+    { "bytesHex": "",                                               "encoded": "" },
+    { "bytesHex": "61",                                             "encoded": "2g" },
+    { "bytesHex": "626262",                                         "encoded": "a3gV" },
+    { "bytesHex": "636363",                                         "encoded": "aPEr" },
+    { "bytesHex": "73696d706c792061206c6f6e6720737472696e67",       "encoded": "2cFupjhnEsSn59qHXstmK2ffpLv2" },
+    { "bytesHex": "00eb15231dfceb60925886b67d065299925915aeb172c06647", "encoded": "1NS17iag9jJgTHD1VXjvLCEnZuQ3rJDE9L" },
+    { "bytesHex": "516b6fcd0f",                                     "encoded": "ABnLTmg" },
+    { "bytesHex": "bf4f89001e670274dd",                             "encoded": "3SEo3LWLoPntC" },
+    { "bytesHex": "572e4794",                                       "encoded": "3EFU7m" },
+    { "bytesHex": "ecac89cad93923c02321",                           "encoded": "EJDM8drfXA6uyA" },
+    { "bytesHex": "10c8511e",                                       "encoded": "Rt5zm" },
+    { "bytesHex": "00000000000000000000",                           "encoded": "1111111111" }
+  ]
+}

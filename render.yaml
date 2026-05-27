@@ -1,0 +1,32 @@
+# Render.com one-click deploy: push to GitHub, then click "New → Blueprint"
+# and point at this repo. Render reads this file to provision the service
+# and a persistent disk for SQLite.
+services:
+  - type: web
+    name: rideshare
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /about
+    autoDeploy: true
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_PATH
+        value: /data/app.db
+      - key: APP_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ALLOWLIST_SALT
+        generateValue: true
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: TRUST_PROXY
+        value: "true"

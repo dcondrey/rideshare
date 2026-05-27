@@ -1,0 +1,153 @@
+{
+  // Biome 2.x configuration. Single dev dependency replaces ESLint + Prettier.
+  // Biome's JSON parser accepts // line comments and /* block comments */ in
+  // biome.json (it's effectively JSONC), so we use them directly.
+  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": false
+  },
+
+  // Source surface area: lib/, routes/, public/*.js, tests/, server.js,
+  // and our own scripts/. Vendored / data / docs are excluded.
+  "files": {
+    "includes": [
+      "lib/**/*.js",
+      "routes/**/*.js",
+      "public/**/*.js",
+      "tests/**/*.js",
+      "server.js",
+      "scripts/**/*.mjs",
+      "scripts/**/*.js",
+      "biome.json",
+      "tsconfig.json",
+      "package.json",
+      "!data/**",
+      "!.env",
+      "!**/*.md",
+      "!public/lib/**",
+      "!node_modules/**"
+    ]
+  },
+
+  // Honor `// biome-ignore-format` comments at call sites.
+  // LF line endings, 2-space indent, 100-col width.
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100,
+    "attributePosition": "auto"
+  },
+
+  // Double quotes, semicolons, trailing commas in multi-line literals.
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "quoteProperties": "asNeeded",
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false
+    },
+    "globals": []
+  },
+
+  "json": {
+    "formatter": {
+      "enabled": true,
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "lineEnding": "lf",
+      "lineWidth": 100,
+      "trailingCommas": "none"
+    },
+    "parser": {
+      "allowComments": true,
+      "allowTrailingCommas": false
+    }
+  },
+
+  // Recommended rules + targeted overrides per the security/observability brief.
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+
+      "complexity": {
+        "noUselessFragments": "error",
+        "noBarrelFile": "off"
+      },
+
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "noUnusedFunctionParameters": "error",
+        "useExhaustiveDependencies": "off",
+        "noUndeclaredVariables": "error"
+      },
+
+      "security": {
+        "noDangerouslySetInnerHtml": "off",
+        "noGlobalEval": "error"
+      },
+
+      "style": {
+        "noVar": "error",
+        "useConst": "error",
+        "useTemplate": "error",
+        "useNodejsImportProtocol": "error"
+      },
+
+      "suspicious": {
+        "noExplicitAny": "warn",
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["warn", "error"]
+          }
+        }
+      }
+    }
+  },
+
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+
+  "overrides": [
+    {
+      // Tests may use console.log freely for diagnostics.
+      "includes": ["tests/**/*.js"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      // scripts/ are CLI dev tooling, not shipped runtime — relax console restrictions.
+      "includes": ["scripts/**/*.mjs", "scripts/**/*.js"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ]
+}

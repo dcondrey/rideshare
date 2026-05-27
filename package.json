@@ -1,0 +1,15 @@
+{
+  "name": "event-rideshare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lightweight, zero-dependency ride-sharing webapp for event attendees. Self-contained, one-command deploy.",
+  "license": "MIT",
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning server.js",
+    "dev": "node --no-warnings=ExperimentalWarning --watch server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

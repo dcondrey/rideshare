@@ -1,0 +1,20 @@
+# GitHub funding links shown on the repo sidebar.
+# Uncomment and fill in the appropriate handle(s) once a sponsorship account exists.
+# All keys are optional; leave anything you don't use commented out.
+#
+# Reference: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+# github: [your-github-username]            # GitHub Sponsors username (or up to 4)
+# patreon: your-patreon-username            # Patreon username
+# open_collective: your-collective-slug     # Open Collective slug
+# ko_fi: your-ko-fi-username                # Ko-fi username
+# tidelift: npm/your-package-name           # Tidelift platform-name/package-name
+# community_bridge: your-project-slug       # CommunityBridge project slug
+# liberapay: your-liberapay-username        # Liberapay username
+# issuehunt: your-issuehunt-username        # IssueHunt username
+# otechie: your-otechie-username            # Otechie username
+# lfx_crowdfunding: your-lfx-project-slug   # LFX Crowdfunding slug
+# polar: your-polar-username                # Polar.sh username
+# buy_me_a_coffee: your-bmac-username       # Buy Me A Coffee username
+# thanks_dev: u/gh/your-github-username     # thanks.dev username
+# custom: ['https://example.com/donate']    # Up to 4 custom URLs

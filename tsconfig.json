@@ -1,0 +1,31 @@
+{
+  // Type-check the JS codebase via JSDoc + `// @ts-check` headers. No emit.
+  // Run with: `npx tsc --noEmit -p tsconfig.json`.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+
+    // Allow JS files to participate in type-checking; rely on JSDoc.
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+
+    // Strict family — JSDoc inference makes implicit-any acceptable, so it stays off.
+    "strict": true,
+    "noImplicitAny": false,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": false,
+
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    // Pull in @types/node only — no runtime deps allowed; @types/node is a devDependency.
+    "types": ["node"]
+  },
+  "include": ["lib/**/*.js", "routes/**/*.js", "server.js", "tests/**/*.js"],
+  "exclude": ["node_modules", "data", "public/lib"]
+}

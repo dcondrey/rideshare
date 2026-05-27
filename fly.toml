@@ -1,0 +1,39 @@
+# Fly.io deploy:
+#   fly launch --copy-config --name your-app-name
+#   fly volumes create data --size 1 --region iad
+#   fly secrets set SESSION_SECRET=$(openssl rand -hex 32) \
+#                   ALLOWLIST_SALT=$(openssl rand -hex 32) \
+#                   ADMIN_EMAILS=you@example.com \
+#                   RESEND_API_KEY=re_xxx \
+#                   EMAIL_FROM='"Rideshare <noreply@yourdomain.com>"' \
+#                   APP_URL=https://your-app-name.fly.dev \
+#                   TRUST_PROXY=true
+#   fly deploy
+
+app = "event-rideshare"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+  DATABASE_PATH = "/data/app.db"
+
+[[mounts]]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout  = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/about"

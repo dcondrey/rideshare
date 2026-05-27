@@ -1,0 +1,23 @@
+# Self-host with one command:
+#
+#   cp .env.example .env       # then edit it
+#   docker compose up -d
+#
+# Open http://localhost:3000
+
+services:
+  rideshare:
+    build: .
+    image: event-rideshare:latest
+    container_name: rideshare
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      DATABASE_PATH: /data/app.db
+    volumes:
+      - rideshare-data:/data
+
+volumes:
+  rideshare-data:

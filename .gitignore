@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+dist/
+build/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Database (NEVER commit attendee data)
+data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Allowlist CSVs (PII — NEVER commit)
+*.csv
+attendees*
+allowlist*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+Thumbs.db

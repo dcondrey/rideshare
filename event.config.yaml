@@ -1,0 +1,91 @@
+# ───────────────────────────────────────────────────────────────────────────
+#  Event Rideshare configuration
+#
+#  Most of these fields can be edited live in the admin UI (/admin/config)
+#  without restarting the app. Values here are the defaults loaded at boot.
+#
+#  ⚠ This is a YAML *subset*: mappings, sequences, scalars, comments. See
+#    lib/yaml.js for the supported feature set. If you need anchors,
+#    multi-line literals, or flow style, rename this file to event.config.json
+#    and use JSON instead — the loader will pick up either.
+# ───────────────────────────────────────────────────────────────────────────
+
+# Short name shown in the header and emails. e.g. "IIW XL"
+name: Your Event
+
+# Full name shown on the landing page.
+longName: Your Event Name
+
+tagline: Find a ride. Offer a seat. Get there together.
+
+# Inclusive event date range (YYYY-MM-DD). Used to bound ride dates.
+dates:
+  start: 2026-01-01
+  end: 2026-01-03
+
+# The venue location. Coordinates are used to centre the map and to drop
+# the venue pin. Address is shown on the landing page.
+venue:
+  name: Conference Venue
+  address: 1401 N Shoreline Blvd, Mountain View, CA 94043
+  lat: 37.4143
+  lng: -122.0773
+
+# Airports attendees commonly fly into. Drives the airport filter and the
+# default pickup pin for airport rides.
+airports:
+  - code: SFO
+    name: San Francisco Intl
+    lat: 37.6213
+    lng: -122.3790
+  - code: SJC
+    name: San Jose Mineta Intl
+    lat: 37.3639
+    lng: -121.9289
+  - code: OAK
+    name: Oakland Intl
+    lat: 37.7126
+    lng: -122.2197
+
+# Optional pre-defined meetup / pickup spots. Each gets a pin on the map and
+# becomes selectable when posting a ride. Edit or add via /admin/meetups.
+meetups: []
+# Example:
+# meetups:
+#   - name: Hotel Avante
+#     address: 860 E El Camino Real, Mountain View
+#     lat: 37.3989
+#     lng: -122.0822
+#   - name: Caltrain Mountain View
+#     address: 600 W Evelyn Ave, Mountain View
+#     lat: 37.3942
+#     lng: -122.0764
+
+# Map appearance. Style options:
+#   voyager      — CartoDB Voyager (default; flat retro warm palette)
+#   positron     — CartoDB Positron (bright minimal grayscale)
+#   dark-matter  — CartoDB Dark Matter (inverted retro)
+#   toner-lite   — Stamen Toner Lite (B&W retro; needs Stadia API key)
+#   osm          — OpenStreetMap (classic colourful)
+#   custom       — uses map.customTileUrl + map.customAttribution below
+map:
+  style: voyager
+  defaultZoom: 11
+  customTileUrl: ""
+  customAttribution: ""
+
+# Branding shown in the header and emails.
+brand:
+  primaryColor: "#4f46e5"
+  # Optional logo. Either:
+  #   - leave blank and upload a logo via /admin/config (stored in the DB,
+  #     served from /logo); OR
+  #   - drop a file in public/ and set logoPath: /your-logo.svg
+  logoPath: null
+
+# Optional URL where attendees registered (shown if their email isn't on
+# the allowlist). Leave null to omit.
+registrationUrl: null
+
+# Optional support contact shown in the footer and on error pages.
+supportEmail: null

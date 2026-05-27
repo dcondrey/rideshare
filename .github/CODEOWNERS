@@ -1,0 +1,42 @@
+# CODEOWNERS — convention reference (no real owners assigned yet).
+#
+# This file is intentionally a placeholder for a fresh project: there are no committed
+# code owners. It documents the *convention* so that, as the team grows, ownership can
+# be added by uncommenting and editing the rules below.
+#
+# How CODEOWNERS works (recap):
+#   - Each line is a glob followed by one or more @users / @org/teams.
+#   - LATER MATCHING rules override earlier ones (last match wins).
+#   - GitHub auto-requests review from listed owners on any PR touching matching files.
+#   - Combine with branch protection ("Require review from Code Owners") to enforce it.
+#
+# Conventions we will follow once owners exist:
+#   - Default owner = the smallest team that can credibly review anything in the repo.
+#   - Security-sensitive paths get an explicit security-reviewer team in addition.
+#   - CI / build infrastructure is owned by whoever maintains the toolchain.
+#   - Docs can have a separate, lower-friction owner (often the same default team).
+#
+# ----------------------------------------------------------------------------------
+# Example rules — UNCOMMENT AND REPLACE @org/team placeholders when owners exist.
+# ----------------------------------------------------------------------------------
+
+# Default owner for everything in the repo (catch-all; should be the LEAST specific rule).
+# *                              @your-org/maintainers
+
+# CI, build, repo plumbing. Changes here can affect every PR's signal, so review carefully.
+# /.github/                      @your-org/platform
+# /scripts/                      @your-org/platform
+
+# Security-relevant code: auth, crypto, session handling, headers, input validation.
+# Add the security team in addition to the default reviewer.
+# /src/auth/                     @your-org/maintainers @your-org/security
+# /src/crypto/                   @your-org/maintainers @your-org/security
+# SECURITY.md                    @your-org/security
+
+# Docs can move with a lighter touch.
+# /docs/                         @your-org/docs
+# README.md                      @your-org/docs
+
+# Package manifests must be reviewed by maintainers — Dependabot bumps included.
+# package.json                   @your-org/maintainers
+# package-lock.json              @your-org/maintainers
