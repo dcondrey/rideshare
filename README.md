@@ -102,7 +102,8 @@ npm run dev
 
 ---
 
-## Deploy
+<details>
+<summary><strong>Deploy</strong> -- Docker, Railway, Render, Fly.io</summary>
 
 ### Docker
 
@@ -155,9 +156,10 @@ fly secrets set \
 fly deploy
 ```
 
----
+</details>
 
-## Configuration
+<details>
+<summary><strong>Configuration</strong> -- event name, dates, airports, brand, map style</summary>
 
 All event configuration lives in **`event.config.yaml`** at the project root. Edit it once before deploy, or change most fields live via `/admin/config` without restarting. JSON is also accepted (`event.config.json`).
 
@@ -230,9 +232,10 @@ For Mapbox, MapTiler, or other paid providers, choose `custom` and set `map.cust
 
 Riders can pin their pickup location by selecting a meetup spot, entering coordinates, or letting it default to the airport.
 
----
+</details>
 
-## Importing attendees
+<details>
+<summary><strong>Importing attendees</strong></summary>
 
 1. Sign in as admin and visit `/admin/allowlist`.
 2. Upload or paste a CSV. Accepts a single column of emails, or any multi-column file with an `email` header.
@@ -240,9 +243,10 @@ Riders can pin their pickup location by selecting a meetup spot, entering coordi
 
 The CSV is never written to disk. Each email is normalized (lowercase, trimmed, Gmail dot/plus-tag stripped) and stored as `HMAC-SHA256(email, ALLOWLIST_SALT)`. Raw emails are never persisted.
 
----
+</details>
 
-## Environment variables
+<details>
+<summary><strong>Environment variables</strong></summary>
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
@@ -259,9 +263,10 @@ The CSV is never written to disk. Each email is normalized (lowercase, trimmed, 
 | `MAGIC_LINK_RATE_LIMIT` | | `5` | Max sign-in emails per address per hour |
 | `SESSION_LIFETIME_DAYS` | | `14` | Session cookie lifetime |
 
----
+</details>
 
-## Operations
+<details>
+<summary><strong>Operations</strong> -- backups, wiping after the event, updating</summary>
 
 ### Backups
 
@@ -279,37 +284,10 @@ Use **Allowlist > Wipe attendee data** in the admin UI. To remove everything (ri
 
 Pull the latest source, restart the process. Schema migrations are forward-compatible (`CREATE TABLE IF NOT EXISTS`, additive `ALTER`), so no manual migration step is needed.
 
----
+</details>
 
-## Why zero dependencies?
-
-This is a deliberate architectural choice, not a stunt.
-
-- **No supply chain risk.** No `node_modules`, no transitive dependencies, no advisory fatigue. The attack surface is this code and Node.js itself.
-- **No build step.** Clone and run. No webpack, no transpiler, no bundler.
-- **No version rot.** Nothing to update, audit, or pin. The app runs the same today as it will in five years on any Node >=22.5.
-- **Instant deploy.** Docker image builds in seconds. CI runs in seconds. Cold starts are instant.
-- **Auditability.** Every line of code is in this repo. Reviewers can read it all in an afternoon.
-
-The tradeoffs are real (hand-rolled SMTP client, custom YAML parser, custom map renderer) but intentional. Each is <300 lines, tested, and does exactly what this app needs.
-
----
-
-## Portable trust
-
-Event Rideshare implements a decentralized trust system using W3C standards:
-
-- Each deployment has a **`did:web`** identity (anchored at `/.well-known/did.json`).
-- Each user generates a **`did:key`** (Ed25519) in their browser. The private key stays in IndexedDB.
-- Confirmed rides mint **W3C Verifiable Credentials** (compact JWT, EdDSA-signed).
-- Users carry credentials to other deployments, where signatures are verified against the original issuer's DID document.
-- A public verifier playground at `/trust/verify` lets anyone inspect any credential.
-
-No central registry. No proprietary format. No lock-in. See [TRUST.md](./TRUST.md) for the full protocol specification.
-
----
-
-## Project layout
+<details>
+<summary><strong>Project layout</strong></summary>
 
 ```
 .
@@ -370,6 +348,36 @@ No central registry. No proprietary format. No lock-in. See [TRUST.md](./TRUST.m
 └── CHANGELOG.md
 ```
 
+</details>
+
+---
+
+## Why zero dependencies?
+
+This is a deliberate architectural choice, not a stunt.
+
+- **No supply chain risk.** No `node_modules`, no transitive dependencies, no advisory fatigue. The attack surface is this code and Node.js itself.
+- **No build step.** Clone and run. No webpack, no transpiler, no bundler.
+- **No version rot.** Nothing to update, audit, or pin. The app runs the same today as it will in five years on any Node >=22.5.
+- **Instant deploy.** Docker image builds in seconds. CI runs in seconds. Cold starts are instant.
+- **Auditability.** Every line of code is in this repo. Reviewers can read it all in an afternoon.
+
+The tradeoffs are real (hand-rolled SMTP client, custom YAML parser, custom map renderer) but intentional. Each is <300 lines, tested, and does exactly what this app needs.
+
+---
+
+## Portable trust
+
+Event Rideshare implements a decentralized trust system using W3C standards:
+
+- Each deployment has a **`did:web`** identity (anchored at `/.well-known/did.json`).
+- Each user generates a **`did:key`** (Ed25519) in their browser. The private key stays in IndexedDB.
+- Confirmed rides mint **W3C Verifiable Credentials** (compact JWT, EdDSA-signed).
+- Users carry credentials to other deployments, where signatures are verified against the original issuer's DID document.
+- A public verifier playground at `/trust/verify` lets anyone inspect any credential.
+
+No central registry. No proprietary format. No lock-in. See [TRUST.md](./TRUST.md) for the full protocol specification.
+
 ---
 
 ## Security
@@ -395,7 +403,7 @@ Found a vulnerability? See the disclosure process in [SECURITY.md](./SECURITY.md
 
 - **Single instance.** SQLite + in-memory rate limiter prevent multi-replica deployments. For event scale (a few thousand users), one small instance is more than sufficient.
 - **No real-time updates.** Server-rendered pages. No websockets.
-- **SMTP subset.** The hand-rolled SMTP client supports PLAIN/LOGIN AUTH and STARTTLS (works with Postmark, SES, Mailgun, Gmail). For XOAUTH2-only providers, use Resend.
+- **SMTP subset.** The hand-rolled SMTP client supports PLAIN/LOGIN Auth and STARTTLS (works with Postmark, SES, Mailgun, Gmail). For XOAUTH2-only providers, use Resend.
 - **`node:sqlite` warning.** Technically experimental in Node 22 (warning suppressed). Fully stable in Node 24+.
 
 For a full list of intentional non-features (no payments, no OAuth, no real-time chat, no native app) and the reasoning behind each, see [docs/intentional-non-features.md](./docs/intentional-non-features.md).
