@@ -9,7 +9,7 @@ Deploy in one command. Run it for the event. Shut it down after.
 [![Node 22.5+](https://img.shields.io/badge/node-%E2%89%A522.5-brightgreen)](#requirements)
 [![Zero Dependencies](https://img.shields.io/badge/npm%20deps-0-blue)](#why-zero-dependencies)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](./LICENSE)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](#)
+[![CI](https://github.com/dcondrey/rideshare/actions/workflows/ci.yml/badge.svg)](https://github.com/dcondrey/rideshare/actions/workflows/ci.yml)
 
 </div>
 
