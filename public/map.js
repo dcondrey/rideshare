@@ -26,6 +26,45 @@
       .replace(/"/g, "&quot;");
   }
 
+  // Tile attribution (including an event's admin-supplied customAttribution,
+  // which is deliberately allowed to contain a link — see routes/admin.js)
+  // is untrusted markup. Render it via safe DOM construction — never through
+  // innerHTML/outerHTML — keeping only text and <a href="http(s)://...">
+  // links with any other tags/attributes (including event handlers) dropped.
+  function renderAttribution(container, html) {
+    container.textContent = "";
+    var doc;
+    try {
+      doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+    } catch (e) {
+      container.textContent = String(html || "");
+      return;
+    }
+    var allowedHref = /^https?:\/\//i;
+    (function walk(src, dest) {
+      var child = src.firstChild;
+      while (child) {
+        if (child.nodeType === 3) {
+          dest.appendChild(document.createTextNode(child.nodeValue));
+        } else if (child.nodeType === 1 && child.tagName === "A") {
+          var href = child.getAttribute("href") || "";
+          var a = document.createElement("a");
+          if (allowedHref.test(href)) {
+            a.setAttribute("href", href);
+            a.setAttribute("rel", "noopener noreferrer");
+            a.setAttribute("target", "_blank");
+          }
+          walk(child, a);
+          dest.appendChild(a);
+        } else if (child.nodeType === 1) {
+          // Unknown element: keep its descendant text/links, drop the tag itself.
+          walk(child, dest);
+        }
+        child = child.nextSibling;
+      }
+    })(doc.body, container);
+  }
+
   // ── Web Mercator ───────────────────────────────────────────────────────────
   var TILE = 256;
 
@@ -77,7 +116,7 @@
     this.markersLayer = el("div", "tm-markers", c);
     this.popupsLayer = el("div", "tm-popups", c);
     this.attrib = el("div", "tm-attrib", c);
-    this.attrib.innerHTML = this.tile.attribution || "";
+    renderAttribution(this.attrib, this.tile.attribution);
 
     var ctrl = el("div", "tm-controls", c);
     var zin = el("button", "tm-zoom tm-zoom-in", ctrl);
@@ -120,6 +159,10 @@
   };
 
   // ── Tile rendering ─────────────────────────────────────────────────────────
+  // this.tile.url can come from an event's admin-supplied customTileUrl
+  // (see lib/map-styles.js), so only ever hand a well-formed http(s) URL to
+  // an <img src> — reject anything else (e.g. a javascript:/data: scheme)
+  // rather than let it reach the DOM.
   TinyMap.prototype._tileUrl = function (x, y, z) {
     var url = this.tile.url;
     var subs = this.tile.subdomains || [];
@@ -128,11 +171,12 @@
       this._subdomainCursor = (this._subdomainCursor + 1) % subs.length;
       url = url.replace("{s}", s);
     }
-    return url
+    url = url
       .replace("{z}", z)
       .replace("{x}", x)
       .replace("{y}", y)
       .replace("{r}", this._isRetina ? "@2x" : "");
+    return /^https:\/\//i.test(url) || /^http:\/\//i.test(url) ? url : "";
   };
 
   TinyMap.prototype._renderTiles = function () {
@@ -477,9 +521,13 @@
 
   // ── Pin SVG ────────────────────────────────────────────────────────────────
   function pinSvg(opts) {
-    var color = opts.color;
+    // color/label can originate from server-rendered config (e.g. an event's
+    // brandColor or a marker label) and are attacker-influenceable, so they
+    // must be escaped before being embedded in this markup — both in the
+    // `fill` attribute and in the `<text>` content.
+    var color = escapeHtml(opts.color);
     var size = opts.size;
-    var label = opts.label || "";
+    var label = escapeHtml(opts.label || "");
     var h = Math.round(size * 1.3125);
     return (
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 42" width="' + size + '" height="' + h + '" aria-hidden="true">' +
