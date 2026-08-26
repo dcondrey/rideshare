@@ -45,7 +45,6 @@ import {
   oneOf,
   reqString,
   optString,
-  reqInt,
 } from "../lib/validate.js";
 import { listMeetups, createMeetup, deleteMeetup } from "../lib/meetups.js";
 import { uploadLogo, removeLogo, hasLogo, MAX_LOGO_BYTES } from "../lib/assets.js";

@@ -52,7 +52,7 @@ export async function startTestServer(envOverrides = {}) {
   await import(`../../routes/trust.js${tag}`);
   await import(`../../routes/well-known.js${tag}`);
   await import(`../../routes/static.js${tag}`);
-  const cfg = await import(`../../lib/config.js${tag}`);
+  await import(`../../lib/config.js${tag}`); // ensures a fresh config module for this test's env
   // Initialize signing key
   await (await import(`../../lib/trust.js${tag}`)).getDeploymentKey();
 
