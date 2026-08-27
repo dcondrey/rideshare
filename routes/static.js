@@ -14,7 +14,7 @@
  */
 
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { resolve, extname, basename } from "node:path";
+import { resolve, extname } from "node:path";
 
 import { get } from "../lib/router.js";
 import { config } from "../lib/config.js";

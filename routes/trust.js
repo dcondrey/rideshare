@@ -20,7 +20,7 @@
  */
 
 import { get, post } from "../lib/router.js";
-import { layout, html, raw } from "../lib/html.js";
+import { layout, html } from "../lib/html.js";
 import {
   getDeploymentKey,
   issueDidChallenge,
@@ -32,7 +32,6 @@ import {
   trustProfileFor,
 } from "../lib/trust.js";
 import { verifyCredential, decodeJwt } from "../lib/vc.js";
-import { config } from "../lib/config.js";
 import { reqString } from "../lib/validate.js";
 
 function requireUser(ctx) {
