@@ -12,9 +12,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
+- Update changelog [skip ci]
 - Restructure README with collapsible sections
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Escape/validate untrusted map config before DOM insertion (#6)
 - Prevent log injection and tainted-format-string in error logging (#5)
 
