@@ -1,15 +1,21 @@
-<div align="center">
+<!-- repo-header:start -->
+<img src="https://github.com/dcondrey.png?size=160" alt="Event Rideshare logo" width="120" align="left">
 
-# Event Rideshare
+<h1>Event Rideshare</h1>
 
-**A self-hosted, zero-dependency ride-sharing platform for conference and event attendees.**
+<p><strong>Zero-dependency, self-hosted ride-sharing platform for conference attendees</strong></p>
+
+<br clear="left">
+
+[![CI](https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/ci.yml?style=flat-square&labelColor=20232a&branch=main&label=CI)](https://github.com/dcondrey/rideshare/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/codeql.yml?style=flat-square&labelColor=20232a&branch=main&label=CodeQL)](https://github.com/dcondrey/rideshare/actions/workflows/codeql.yml) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14407/badge)](https://www.bestpractices.dev/projects/14407) [![License](https://img.shields.io/github/license/dcondrey/rideshare?style=flat-square&labelColor=20232a&color=007ec6&label=license)](https://github.com/dcondrey/rideshare/blob/main/LICENSE) [![Code of Conduct](https://img.shields.io/badge/code%20of%20conduct-Contributor%20Covenant%202.1-6a4c93?style=flat-square&labelColor=20232a)](https://github.com/dcondrey/rideshare/blob/main/CODE_OF_CONDUCT.md) [![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-Sponsor-EA4AAA?style=flat-square&labelColor=20232a)](https://github.com/sponsors/dcondrey)
+<!-- repo-header:end -->
 
 Deploy in one command. Run it for the event. Shut it down after.
 
-[![Node 22.5+](https://img.shields.io/badge/node-%E2%89%A522.5-brightgreen)](#requirements)
-[![Zero Dependencies](https://img.shields.io/badge/npm%20deps-0-blue)](#why-zero-dependencies)
-[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](./LICENSE)
-[![CI](https://github.com/dcondrey/rideshare/actions/workflows/ci.yml/badge.svg)](https://github.com/dcondrey/rideshare/actions/workflows/ci.yml)
+[![Node 22.5+](https://img.shields.io/badge/node-%E2%89%A522.5-brightgreen?style=flat-square&labelColor=20232a&color=007ec6)](#requirements)
+[![Zero Dependencies](https://img.shields.io/badge/npm%20deps-0-blue?style=flat-square&labelColor=20232a&color=007ec6)](#why-zero-dependencies)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square&labelColor=20232a&color=007ec6)](./LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/ci.yml?style=flat-square&labelColor=20232a&branch=main)](https://github.com/dcondrey/rideshare/actions/workflows/ci.yml)
 
 </div>
 
