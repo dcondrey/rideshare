@@ -9,6 +9,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Expand the pull request template with type, security, and threat-model sections
+- Update changelog [skip ci]
 - Standardize repository presentation (#12)
 - Update changelog [skip ci]
 - Update changelog [skip ci]
