@@ -10,6 +10,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 
 ### Documentation
 - Update changelog [skip ci]
+- Update changelog [skip ci]
 - Expand the pull request template with type, security, and threat-model sections
 - Update changelog [skip ci]
 - Standardize repository presentation (#12)
@@ -26,6 +27,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Give the CI boot smoke job the env vars lib/config.js requires
 - Run CI tests via node --test discovery and repair the dead html tests
 - Stop .gitignore from excluding source files named allowlist*
 - Rewrite rate-limit tests against the real rateLimit() API (#9)
