@@ -18,10 +18,15 @@ data/
 *.db-shm
 *.db-wal
 
-# Allowlist CSVs (PII — NEVER commit)
+# Attendee/allowlist exports (PII — NEVER commit).
+# These patterns are anchored to the repo root on purpose. Unanchored,
+# `allowlist*` matched every path segment and silently excluded source files
+# named after the feature — lib/allowlist.js, routes/allowlist.js and
+# tests/unit/allowlist*.test.js were all missing from the repo, which broke
+# CI's test and boot-smoke jobs on a clean checkout.
 *.csv
-attendees*
-allowlist*
+/attendees*
+/allowlist*
 
 # Environment
 .env
