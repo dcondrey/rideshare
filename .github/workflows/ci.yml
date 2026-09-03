@@ -42,9 +42,12 @@ jobs:
         # Confirms the matrix entry actually activated, useful when debugging a flake on one row.
         run: node --version
 
-      - name: Run unit, fuzz, and integration tests
+      - name: Run tests
         # Built-in test runner; no install step because we have zero deps.
-        run: node --test tests/unit tests/fuzz tests/integration
+        # Bare `node --test` uses the runner's own discovery (every *.test.js
+        # under the repo). Passing directories is NOT supported — Node resolves
+        # a positional argument as a module path and fails with MODULE_NOT_FOUND.
+        run: node --test
 
   typecheck:
     name: typecheck

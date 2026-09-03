@@ -3,24 +3,27 @@
  * Environment setup for tests. Sets all required env vars to deterministic
  * values BEFORE any module under test is imported.
  *
- * Tests that need lib/config.js or anything that imports it must call
- * `setupTestEnv()` before any other import that touches config.
+ * IMPORTANT: the defaults are applied as a module *side effect*, at import
+ * time. They have to be. `import` declarations are hoisted and every imported
+ * module is evaluated before the first statement of the importing file runs,
+ * so the older documented pattern —
+ *
+ *     import { setupTestEnv } from "../helpers/env.js";
+ *     setupTestEnv();                    // ← runs too late
+ *     import { thing } from "../../lib/thing.js";
+ *
+ * — could never work: lib/thing.js (and lib/config.js under it) was already
+ * evaluated, and lib/config.js exits the process when APP_URL is missing.
+ * Importing this module at all is now what sets the env, and ESM evaluates
+ * dependencies in source order, so listing it above the modules under test is
+ * sufficient.
  *
  * Usage:
- *   import { setupTestEnv } from "../helpers/env.js";
- *   setupTestEnv();   // ← must come BEFORE imports that read process.env
+ *   import { setupTestEnv } from "../helpers/env.js";   // ← env is set here
+ *   setupTestEnv({ NODE_ENV: "production" });           // optional overrides
+ *
+ * `setupTestEnv` is still exported for tests that need to override a value at
+ * runtime. Re-exported from helpers/setup.js so there is exactly one copy of
+ * the defaults.
  */
-
-export function setupTestEnv(overrides = {}) {
-  const defaults = {
-    APP_URL: "http://localhost:9999",
-    SESSION_SECRET: "a".repeat(64),
-    ALLOWLIST_SALT: "b".repeat(64),
-    ADMIN_EMAILS: "admin@example.test",
-    EMAIL_FROM: "Test <noreply@example.test>",
-    PORT: "9999",
-    DATABASE_PATH: ":memory:",
-    NODE_ENV: "test",
-  };
-  Object.assign(process.env, defaults, overrides);
-}
+export { setupTestEnv } from "./setup.js";

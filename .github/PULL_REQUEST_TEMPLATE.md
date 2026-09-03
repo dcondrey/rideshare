@@ -26,8 +26,8 @@ Fixes #
 
 ## Testing checklist
 
-- [ ] Added or updated tests under `tests/unit`, `tests/fuzz`, or `tests/integration`
-- [ ] Ran `node --test tests/unit tests/fuzz tests/integration` locally and it passed on Node 22 and Node 24
+- [ ] Added or updated tests under `tests/unit` or `tests/lint`
+- [ ] Ran `node --test` locally and it passed on Node 22 and Node 24
 - [ ] Verified the change manually (steps below if non-trivial)
 - [ ] CI is green (all jobs in `.github/workflows/ci.yml`)
 
