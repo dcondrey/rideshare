@@ -158,6 +158,13 @@ jobs:
         env:
           PORT: '8080'
           NODE_ENV: 'test'
+          # lib/config.js exits when any of these is missing. Throwaway values
+          # for a boot smoke test only — never reused anywhere real.
+          APP_URL: 'http://127.0.0.1:8080'
+          SESSION_SECRET: '0000000000000000000000000000000000000000000000000000000000000000'
+          ALLOWLIST_SALT: '1111111111111111111111111111111111111111111111111111111111111111'
+          ADMIN_EMAILS: 'ci@example.invalid'
+          DATABASE_PATH: ':memory:'
         run: |
           set -euo pipefail
 
