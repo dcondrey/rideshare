@@ -33,6 +33,7 @@ import {
 } from "../lib/trust.js";
 import { verifyCredential, decodeJwt } from "../lib/vc.js";
 import { reqString } from "../lib/validate.js";
+import { errorMessage } from "../lib/errors.js";
 
 function requireUser(ctx) {
   if (!ctx.user) {
@@ -212,7 +213,7 @@ post("/trust/bind", async (ctx) => {
     });
     ctx.json({ ok: true, did: body.did });
   } catch (err) {
-    ctx.json({ ok: false, error: err.message }, 400);
+    ctx.json({ ok: false, error: errorMessage(err) }, 400);
   }
 });
 
@@ -249,7 +250,7 @@ post("/trust/import-bundle", async (ctx) => {
     try {
       results.push(await importCredential({ userId: user.id, jwt }));
     } catch (err) {
-      results.push({ ok: false, error: err.message });
+      results.push({ ok: false, error: errorMessage(err) });
     }
   }
   const okCount = results.filter((r) => r.ok).length;
@@ -334,7 +335,7 @@ post("/rides/:id/confirm", async (ctx) => {
     });
     ctx.json(r);
   } catch (err) {
-    ctx.json({ ok: false, error: err.message }, 400);
+    ctx.json({ ok: false, error: errorMessage(err) }, 400);
   }
 });
 

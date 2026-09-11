@@ -43,6 +43,7 @@ import {
 import { listMeetups } from "../lib/meetups.js";
 import { trustBadgeFor } from "../lib/trust.js";
 import { db } from "../lib/db.js";
+import { errorMessage } from "../lib/errors.js";
 
 // Helpers ────────────────────────────────────────────────────────────────────
 function requireUser(ctx) {
@@ -573,10 +574,10 @@ post("/rides/:id/claim", async (ctx) => {
   try {
     createClaim({ rideId, claimerId: user.id, seats, message });
   } catch (err) {
-    if (/UNIQUE/.test(err.message)) {
+    if (/UNIQUE/.test(errorMessage(err))) {
       // Already claimed — silently redirect to the ride.
     } else {
-      ctx.error(err.message);
+      ctx.error(errorMessage(err));
       return;
     }
   }

@@ -49,6 +49,7 @@ import {
 import { listMeetups, createMeetup, deleteMeetup } from "../lib/meetups.js";
 import { uploadLogo, removeLogo, hasLogo, MAX_LOGO_BYTES } from "../lib/assets.js";
 import { listStyles } from "../lib/map-styles.js";
+import { errorMessage } from "../lib/errors.js";
 
 function requireAdmin(ctx) {
   if (!ctx.user) {
@@ -451,7 +452,7 @@ post("/admin/logo", async (ctx) => {
   try {
     uploadLogo(dataUrl, { actorId: user.id, actorEmail: user.email });
   } catch (err) {
-    ctx.error(err.message, 400);
+    ctx.error(errorMessage(err), 400);
     return;
   }
   ctx.redirect("/admin/config");
