@@ -75,7 +75,7 @@ jobs:
 
       - name: Run TypeScript in --noEmit mode
         # Pinned exactly so a new Biome release cannot fail CI on its own schedule.
-        run: npx --yes typescript@5 tsc --noEmit -p tsconfig.json
+        run: npx --yes -p typescript@5 tsc --noEmit -p tsconfig.json
 
   lint:
     name: lint
