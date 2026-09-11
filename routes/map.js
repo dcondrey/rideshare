@@ -53,8 +53,10 @@ get("/map", async (ctx) => {
       if (Number.isFinite(r.pickup_lat) && Number.isFinite(r.pickup_lng)) {
         coord = { lat: r.pickup_lat, lng: r.pickup_lng };
         source = "Custom pin";
-      } else if (r.meetup_id && meetupCoords.has(r.meetup_id)) {
-        const m = meetupCoords.get(r.meetup_id);
+      } else if (r.meetup_id && meetupCoords.get(r.meetup_id)) {
+        const m = /** @type {{ lat: number, lng: number, name: string }} */ (
+          meetupCoords.get(r.meetup_id)
+        );
         coord = { lat: m.lat, lng: m.lng };
         source = m.name;
       } else if (airportCoords.has(r.airport)) {

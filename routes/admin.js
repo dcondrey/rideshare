@@ -423,6 +423,7 @@ post("/admin/config", async (ctx) => {
   const body = await ctx.formBody();
   for (const key of listOverridableKeys()) {
     let v = (body[key] ?? "").trim();
+    /** @type {string | number | null} */
     let coerced = v === "" ? null : v;
     // Numeric coercion for known number fields
     if (

@@ -18,15 +18,16 @@ export function setNow(t) {
   Date.now = () => frozenAt;
   // Patch the Date constructor so `new Date()` (no args) returns frozen time
   /** @type {any} */
-  const FakeDate = function (...args) {
+  const FakeDate = function (/** @type {any[]} */ ...args) {
     if (args.length === 0) return new RealDate(frozenAt);
-    return new RealDate(...args);
+    // The shim forwards whatever the caller passed; RealDate's overloads are
+    // not expressible for a runtime-length argument list.
+    return Reflect.construct(RealDate, args);
   };
   FakeDate.now = () => frozenAt;
   FakeDate.parse = RealDate.parse;
   FakeDate.UTC = RealDate.UTC;
   FakeDate.prototype = RealDate.prototype;
-  // @ts-expect-error
   global.Date = FakeDate;
 }
 
@@ -38,7 +39,6 @@ export function advance(ms) {
 
 export function restoreClock() {
   Date.now = realDateNow;
-  // @ts-expect-error
   global.Date = RealDate;
   frozenAt = null;
 }

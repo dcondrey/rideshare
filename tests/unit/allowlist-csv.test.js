@@ -164,7 +164,7 @@ describe("parseAllowlistCsv — dedup + invalid handling", () => {
 			"carol@example.com",
 		]);
 		assert.ok(
-			out.skipped >= 2,
+			(out.skipped ?? 0) >= 2,
 			`expected at least 2 skipped, got ${out.skipped}`,
 		);
 	});

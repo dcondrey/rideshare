@@ -112,8 +112,12 @@ get("/rides", async (ctx) => {
   const event = getEventConfig();
   const q = ctx.query;
   const filters = {
-    kind: q.kind || "any",
-    direction: q.direction || "any",
+    kind: /** @type {'offer'|'request'|'any'} */ (
+      ["offer", "request"].includes(q.kind) ? q.kind : "any"
+    ),
+    direction: /** @type {'to_venue'|'from_venue'|'any'} */ (
+      ["to_venue", "from_venue"].includes(q.direction) ? q.direction : "any"
+    ),
     airport: q.airport || "any",
     date: q.date || "any",
   };
@@ -241,6 +245,13 @@ post("/rides/new", async (ctx) => {
   ctx.redirect(`/rides/${id}`);
 });
 
+/**
+ * @param {{ values?: { kind?: string, direction?: string, airport?: string,
+ *   other_place?: string, depart_date?: string, depart_time?: string,
+ *   flex_minutes?: string|number, seats?: string|number, notes?: string,
+ *   pickup_lat?: string|number, pickup_lng?: string|number,
+ *   meetup_id?: string|number } }} args
+ */
 function postForm({ values = {} }) {
   const event = getEventConfig();
   return html`
