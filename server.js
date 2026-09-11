@@ -26,47 +26,51 @@ import "./routes/static.js";
 
 // Seed event-defined meetups from event.config.yaml (only if table is empty).
 import { seedMeetupsIfEmpty } from "./lib/meetups.js";
+
 seedMeetupsIfEmpty();
 
 // Initialize the deployment's signing key (one-time, then cached).
 import { getDeploymentKey } from "./lib/trust.js";
+
 getDeploymentKey();
 
 const server = createServer((req, res) => {
-  dispatch(req, res, { trustProxy: config.trustProxy }).catch((err) => {
-    console.error("[server] unhandled:", err);
-    if (!res.headersSent) {
-      res.statusCode = 500;
-      res.setHeader("Content-Type", "text/plain");
-      res.end("Internal server error");
-    } else {
-      try { res.end(); } catch {}
-    }
-  });
+	dispatch(req, res, { trustProxy: config.trustProxy }).catch((err) => {
+		console.error("[server] unhandled:", err);
+		if (!res.headersSent) {
+			res.statusCode = 500;
+			res.setHeader("Content-Type", "text/plain");
+			res.end("Internal server error");
+		} else {
+			try {
+				res.end();
+			} catch {}
+		}
+	});
 });
 
 server.listen(config.port, () => {
-  const addr = server.address();
-  const port = typeof addr === "object" && addr ? addr.port : config.port;
-  console.info(
-    `\n  ✓ ${config.event.name} Rideshare ready\n` +
-      `    Local:    http://localhost:${port}\n` +
-      `    Public:   ${config.appUrl}\n` +
-      `    Database: ${config.databasePath}\n` +
-      `    Email:    ${config.resendApiKey ? "Resend" : config.smtp.host ? `SMTP (${config.smtp.host})` : "NONE — set RESEND_API_KEY or SMTP_HOST"}\n` +
-      `    Admins:   ${config.adminEmails.length ? config.adminEmails.join(", ") : "NONE — set ADMIN_EMAILS"}\n`,
-  );
+	const addr = server.address();
+	const port = typeof addr === "object" && addr ? addr.port : config.port;
+	console.info(
+		`\n  ✓ ${config.event.name} Rideshare ready\n` +
+			`    Local:    http://localhost:${port}\n` +
+			`    Public:   ${config.appUrl}\n` +
+			`    Database: ${config.databasePath}\n` +
+			`    Email:    ${config.resendApiKey ? "Resend" : config.smtp.host ? `SMTP (${config.smtp.host})` : "NONE — set RESEND_API_KEY or SMTP_HOST"}\n` +
+			`    Admins:   ${config.adminEmails.length ? config.adminEmails.join(", ") : "NONE — set ADMIN_EMAILS"}\n`,
+	);
 });
 
 // Graceful shutdown so the HTTP server drains and SQLite gets a clean close.
 function shutdown(signal) {
-  console.info(`\n[server] received ${signal}, shutting down…`);
-  server.close(() => {
-    console.info("[server] closed");
-    process.exit(0);
-  });
-  // Force-exit after 10s in case a hung connection blocks close.
-  setTimeout(() => process.exit(0), 10000).unref();
+	console.info(`\n[server] received ${signal}, shutting down…`);
+	server.close(() => {
+		console.info("[server] closed");
+		process.exit(0);
+	});
+	// Force-exit after 10s in case a hung connection blocks close.
+	setTimeout(() => process.exit(0), 10000).unref();
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

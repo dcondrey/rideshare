@@ -19,44 +19,44 @@
  *   POST /trust/verify                  → verify any credential, return reasoned result
  */
 
-import { get, post } from "../lib/router.js";
-import { layout, html } from "../lib/html.js";
-import {
-  getDeploymentKey,
-  issueDidChallenge,
-  bindDid,
-  getUserDid,
-  confirmRide,
-  credentialsIssuedTo,
-  importCredential,
-  trustProfileFor,
-} from "../lib/trust.js";
-import { verifyCredential, decodeJwt } from "../lib/vc.js";
-import { reqString } from "../lib/validate.js";
 import { errorMessage } from "../lib/errors.js";
+import { html, layout } from "../lib/html.js";
+import { get, post } from "../lib/router.js";
+import {
+	bindDid,
+	confirmRide,
+	credentialsIssuedTo,
+	getDeploymentKey,
+	getUserDid,
+	importCredential,
+	issueDidChallenge,
+	trustProfileFor,
+} from "../lib/trust.js";
+import { reqString } from "../lib/validate.js";
+import { decodeJwt, verifyCredential } from "../lib/vc.js";
 
 function requireUser(ctx) {
-  if (!ctx.user) {
-    ctx.redirect("/");
-    return null;
-  }
-  return ctx.user;
+	if (!ctx.user) {
+		ctx.redirect("/");
+		return null;
+	}
+	return ctx.user;
 }
 
 // ── /trust dashboard ─────────────────────────────────────────────────────────
 get("/trust", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  const userDid = getUserDid(user.id);
-  const profile = trustProfileFor(user.id);
-  const issued = credentialsIssuedTo(user.id);
-  const dep = getDeploymentKey();
+	const user = requireUser(ctx);
+	if (!user) return;
+	const userDid = getUserDid(user.id);
+	const profile = trustProfileFor(user.id);
+	const issued = credentialsIssuedTo(user.id);
+	const dep = getDeploymentKey();
 
-  ctx.html(
-    layout({
-      title: "Portable trust",
-      user,
-      children: html`
+	ctx.html(
+		layout({
+			title: "Portable trust",
+			user,
+			children: html`
         <section class="page-head">
           <h1>Portable trust</h1>
           <a class="link" href="/trust/verify">Verifier playground →</a>
@@ -85,8 +85,8 @@ get("/trust", async (ctx) => {
         </section>
 
         ${
-          userDid
-            ? html`
+					userDid
+						? html`
               <section class="card">
                 <h2>Your portable identity</h2>
                 <p><strong>Your DID:</strong> <code class="break">${userDid.did}</code></p>
@@ -99,7 +99,7 @@ get("/trust", async (ctx) => {
                   <button class="button" id="trust-rotate-key">Generate new key (revokes old)</button>
                 </div>
               </section>`
-            : html`
+						: html`
               <section class="card">
                 <h2>Generate your portable identity</h2>
                 <p class="muted">
@@ -112,7 +112,7 @@ get("/trust", async (ctx) => {
                 </button>
                 <p class="muted small" id="trust-create-status"></p>
               </section>`
-        }
+				}
 
         <section class="stat-grid trust-stats">
           ${stat("Verifiable credentials", profile.totalCredentials)}
@@ -125,14 +125,14 @@ get("/trust", async (ctx) => {
         <section class="card">
           <h2>Credentials issued to you here</h2>
           ${
-            issued.length === 0
-              ? html`<p class="muted">
+						issued.length === 0
+							? html`<p class="muted">
                   None yet. After a ride, both parties confirm "I made it" on the
                   ride page. Once both confirm, you both receive a credential.
                 </p>`
-              : html`<ul class="cred-list">
+							: html`<ul class="cred-list">
                   ${issued.map(
-                    (c) => html`
+										(c) => html`
                       <li class="cred-item">
                         <code class="break">${c.id}</code>
                         <p class="muted small">
@@ -144,10 +144,10 @@ get("/trust", async (ctx) => {
                           <textarea readonly rows="4" class="cred-jwt">${c.jwt}</textarea>
                         </details>
                       </li>`,
-                  )}
+									)}
                 </ul>
                 <a class="button" href="/trust/credentials.json" download>Download all as JSON</a>`
-          }
+					}
         </section>
 
         <section class="card">
@@ -177,12 +177,12 @@ get("/trust", async (ctx) => {
 
         <script src="/trust.js" defer></script>
       `,
-    }),
-  );
+		}),
+	);
 });
 
 function stat(label, value) {
-  return html`<div class="stat-card">
+	return html`<div class="stat-card">
     <div class="stat-value">${String(value)}</div>
     <div class="stat-label">${label}</div>
   </div>`;
@@ -190,162 +190,162 @@ function stat(label, value) {
 
 // ── DID bind: challenge + bind ──────────────────────────────────────────────
 post("/trust/bind/challenge", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  const out = issueDidChallenge(user.id);
-  ctx.json(out);
+	const user = requireUser(ctx);
+	if (!user) return;
+	const out = issueDidChallenge(user.id);
+	ctx.json(out);
 });
 
 post("/trust/bind", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  const body = /** @type {any} */ (await ctx.jsonBody());
-  if (!body || typeof body !== "object") {
-    ctx.json({ ok: false, error: "JSON body required" }, 400);
-    return;
-  }
-  try {
-    bindDid({
-      userId: user.id,
-      did: reqString(body.did, "did", { max: 200 }),
-      challenge: reqString(body.challenge, "challenge", { max: 200 }),
-      signatureB64u: reqString(body.signature, "signature", { max: 200 }),
-    });
-    ctx.json({ ok: true, did: body.did });
-  } catch (err) {
-    ctx.json({ ok: false, error: errorMessage(err) }, 400);
-  }
+	const user = requireUser(ctx);
+	if (!user) return;
+	const body = /** @type {any} */ (await ctx.jsonBody());
+	if (!body || typeof body !== "object") {
+		ctx.json({ ok: false, error: "JSON body required" }, 400);
+		return;
+	}
+	try {
+		bindDid({
+			userId: user.id,
+			did: reqString(body.did, "did", { max: 200 }),
+			challenge: reqString(body.challenge, "challenge", { max: 200 }),
+			signatureB64u: reqString(body.signature, "signature", { max: 200 }),
+		});
+		ctx.json({ ok: true, did: body.did });
+	} catch (err) {
+		ctx.json({ ok: false, error: errorMessage(err) }, 400);
+	}
 });
 
 // ── Import credentials ──────────────────────────────────────────────────────
 post("/trust/import", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  const body = /** @type {any} */ (await ctx.jsonBody());
-  if (!body?.jwt) {
-    ctx.json({ ok: false, error: "jwt required" }, 400);
-    return;
-  }
-  const r = await importCredential({ userId: user.id, jwt: body.jwt });
-  ctx.json(r, r.ok ? 200 : 400);
+	const user = requireUser(ctx);
+	if (!user) return;
+	const body = /** @type {any} */ (await ctx.jsonBody());
+	if (!body?.jwt) {
+		ctx.json({ ok: false, error: "jwt required" }, 400);
+		return;
+	}
+	const r = await importCredential({ userId: user.id, jwt: body.jwt });
+	ctx.json(r, r.ok ? 200 : 400);
 });
 
 post("/trust/import-bundle", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  const body = /** @type {any} */ (await ctx.jsonBody());
-  /** @type {string[]} */
-  let jwts = [];
-  if (Array.isArray(body)) jwts = body.filter((x) => typeof x === "string");
-  else if (Array.isArray(body?.credentials)) {
-    jwts = body.credentials
-      .map((c) => (typeof c === "string" ? c : c?.jwt))
-      .filter(Boolean);
-  } else if (body?.jwts && Array.isArray(body.jwts)) {
-    jwts = body.jwts.filter((x) => typeof x === "string");
-  }
-  /** @type {Array<{ ok: boolean, id?: string, error?: string }>} */
-  const results = [];
-  for (const jwt of jwts) {
-    try {
-      results.push(await importCredential({ userId: user.id, jwt }));
-    } catch (err) {
-      results.push({ ok: false, error: errorMessage(err) });
-    }
-  }
-  const okCount = results.filter((r) => r.ok).length;
-  ctx.json({ imported: okCount, total: results.length, results });
+	const user = requireUser(ctx);
+	if (!user) return;
+	const body = /** @type {any} */ (await ctx.jsonBody());
+	/** @type {string[]} */
+	let jwts = [];
+	if (Array.isArray(body)) jwts = body.filter((x) => typeof x === "string");
+	else if (Array.isArray(body?.credentials)) {
+		jwts = body.credentials
+			.map((c) => (typeof c === "string" ? c : c?.jwt))
+			.filter(Boolean);
+	} else if (body?.jwts && Array.isArray(body.jwts)) {
+		jwts = body.jwts.filter((x) => typeof x === "string");
+	}
+	/** @type {Array<{ ok: boolean, id?: string, error?: string }>} */
+	const results = [];
+	for (const jwt of jwts) {
+		try {
+			results.push(await importCredential({ userId: user.id, jwt }));
+		} catch (err) {
+			results.push({ ok: false, error: errorMessage(err) });
+		}
+	}
+	const okCount = results.filter((r) => r.ok).length;
+	ctx.json({ imported: okCount, total: results.length, results });
 });
 
 // ── Credential export ───────────────────────────────────────────────────────
 get("/trust/credentials.json", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  const issued = credentialsIssuedTo(user.id);
-  ctx.res.statusCode = 200;
-  ctx.res.setHeader("Content-Type", "application/json; charset=utf-8");
-  ctx.res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="rideshare-credentials-${new Date().toISOString().slice(0, 10)}.json"`,
-  );
-  ctx.res.end(
-    JSON.stringify(
-      {
-        "@context": "https://eventrideshare.org/contexts/v1",
-        type: "RideshareCredentialBundle",
-        exportedAt: new Date().toISOString(),
-        subjectDid: getUserDid(user.id)?.did || null,
-        credentials: issued.map((c) => ({
-          id: c.id,
-          jwt: c.jwt,
-          counterpartDid: c.counterpart_did,
-          issuedAt: new Date(c.issued_at).toISOString(),
-        })),
-      },
-      null,
-      2,
-    ),
-  );
+	const user = requireUser(ctx);
+	if (!user) return;
+	const issued = credentialsIssuedTo(user.id);
+	ctx.res.statusCode = 200;
+	ctx.res.setHeader("Content-Type", "application/json; charset=utf-8");
+	ctx.res.setHeader(
+		"Content-Disposition",
+		`attachment; filename="rideshare-credentials-${new Date().toISOString().slice(0, 10)}.json"`,
+	);
+	ctx.res.end(
+		JSON.stringify(
+			{
+				"@context": "https://eventrideshare.org/contexts/v1",
+				type: "RideshareCredentialBundle",
+				exportedAt: new Date().toISOString(),
+				subjectDid: getUserDid(user.id)?.did || null,
+				credentials: issued.map((c) => ({
+					id: c.id,
+					jwt: c.jwt,
+					counterpartDid: c.counterpart_did,
+					issuedAt: new Date(c.issued_at).toISOString(),
+				})),
+			},
+			null,
+			2,
+		),
+	);
 });
 
 get("/trust/credentials/:id", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  const row = /** @type {any} */ (
-    await import("../lib/db.js").then(({ db }) =>
-      db
-        .prepare(
-          `SELECT id, jwt FROM credentials_issued WHERE id = ? AND subject_user_id = ?`,
-        )
-        .get(ctx.params.id, user.id),
-    )
-  );
-  if (!row) {
-    ctx.res.statusCode = 404;
-    ctx.res.end();
-    return;
-  }
-  ctx.res.statusCode = 200;
-  ctx.res.setHeader("Content-Type", "application/jwt");
-  ctx.res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="${row.id.replace(/[^a-zA-Z0-9._-]/g, "_")}.jwt"`,
-  );
-  ctx.res.end(row.jwt);
+	const user = requireUser(ctx);
+	if (!user) return;
+	const row = /** @type {any} */ (
+		await import("../lib/db.js").then(({ db }) =>
+			db
+				.prepare(
+					`SELECT id, jwt FROM credentials_issued WHERE id = ? AND subject_user_id = ?`,
+				)
+				.get(ctx.params.id, user.id),
+		)
+	);
+	if (!row) {
+		ctx.res.statusCode = 404;
+		ctx.res.end();
+		return;
+	}
+	ctx.res.statusCode = 200;
+	ctx.res.setHeader("Content-Type", "application/jwt");
+	ctx.res.setHeader(
+		"Content-Disposition",
+		`attachment; filename="${row.id.replace(/[^a-zA-Z0-9._-]/g, "_")}.jwt"`,
+	);
+	ctx.res.end(row.jwt);
 });
 
 // ── Profile JSON (for the badge data on ride cards) ─────────────────────────
 get("/trust/profile.json", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  ctx.json({
-    did: getUserDid(user.id)?.did || null,
-    profile: trustProfileFor(user.id),
-  });
+	const user = requireUser(ctx);
+	if (!user) return;
+	ctx.json({
+		did: getUserDid(user.id)?.did || null,
+		profile: trustProfileFor(user.id),
+	});
 });
 
 // ── Ride confirmation ──────────────────────────────────────────────────────
 post("/rides/:id/confirm", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  try {
-    const r = confirmRide({
-      rideId: parseInt(ctx.params.id, 10),
-      userId: user.id,
-    });
-    ctx.json(r);
-  } catch (err) {
-    ctx.json({ ok: false, error: errorMessage(err) }, 400);
-  }
+	const user = requireUser(ctx);
+	if (!user) return;
+	try {
+		const r = confirmRide({
+			rideId: parseInt(ctx.params.id, 10),
+			userId: user.id,
+		});
+		ctx.json(r);
+	} catch (err) {
+		ctx.json({ ok: false, error: errorMessage(err) }, 400);
+	}
 });
 
 // ── Verifier playground ────────────────────────────────────────────────────
 get("/trust/verify", async (ctx) => {
-  ctx.html(
-    layout({
-      title: "Verify a credential",
-      user: ctx.user,
-      children: html`
+	ctx.html(
+		layout({
+			title: "Verify a credential",
+			user: ctx.user,
+			children: html`
         <section class="page-head">
           <a class="link" href="/trust">← Trust</a>
           <h1>Verifier playground</h1>
@@ -361,33 +361,35 @@ get("/trust/verify", async (ctx) => {
           <button class="button button-primary">Verify</button>
         </form>
       `,
-    }),
-  );
+		}),
+	);
 });
 
 post("/trust/verify", async (ctx) => {
-  let jwt;
-  // Support both form post and JSON
-  const ct = String(ctx.req.headers["content-type"] || "");
-  if (ct.includes("application/json")) {
-    const b = /** @type {any} */ (await ctx.jsonBody());
-    jwt = b?.jwt;
-  } else {
-    const f = await ctx.formBody();
-    jwt = f.jwt;
-  }
-  if (!jwt) {
-    ctx.error("Provide a JWT.", 400);
-    return;
-  }
-  const result = await verifyCredential(jwt);
-  let decoded = null;
-  try { decoded = decodeJwt(jwt); } catch {}
-  ctx.html(
-    layout({
-      title: result.ok ? "Verified ✓" : "Verification failed",
-      user: ctx.user,
-      children: html`
+	let jwt;
+	// Support both form post and JSON
+	const ct = String(ctx.req.headers["content-type"] || "");
+	if (ct.includes("application/json")) {
+		const b = /** @type {any} */ (await ctx.jsonBody());
+		jwt = b?.jwt;
+	} else {
+		const f = await ctx.formBody();
+		jwt = f.jwt;
+	}
+	if (!jwt) {
+		ctx.error("Provide a JWT.", 400);
+		return;
+	}
+	const result = await verifyCredential(jwt);
+	let decoded = null;
+	try {
+		decoded = decodeJwt(jwt);
+	} catch {}
+	ctx.html(
+		layout({
+			title: result.ok ? "Verified ✓" : "Verification failed",
+			user: ctx.user,
+			children: html`
         <section class="page-head">
           <a class="link" href="/trust/verify">← Verify</a>
           <h1>${result.ok ? "Verified ✓" : "Verification failed"}</h1>
@@ -400,18 +402,18 @@ post("/trust/verify", async (ctx) => {
           </ul>
         </section>
         ${
-          decoded
-            ? html`<section class="card">
+					decoded
+						? html`<section class="card">
                 <h2>Decoded</h2>
                 <h3>Header</h3>
                 <pre class="code-block">${JSON.stringify(decoded.header, null, 2)}</pre>
                 <h3>Payload</h3>
                 <pre class="code-block">${JSON.stringify(decoded.payload, null, 2)}</pre>
               </section>`
-            : ""
-        }
+						: ""
+				}
       `,
-    }),
-    result.ok ? 200 : 400,
-  );
+		}),
+		result.ok ? 200 : 400,
+	);
 });
