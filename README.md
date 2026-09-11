@@ -4,6 +4,8 @@
 <p align="center"><strong>Zero-dependency, self-hosted ride-sharing platform for conference attendees</strong></p>
 
 <p align="center">
+  <a href="https://github.com/dcondrey/rideshare/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/ci.yml?style=flat-square&labelColor=20232a&branch=main&label=CI" alt="CI"></a>
+  <a href="https://www.bestpractices.dev/projects/14407"><img src="https://www.bestpractices.dev/projects/14407/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://github.com/dcondrey/rideshare/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/codeql.yml?style=flat-square&labelColor=20232a&branch=main&label=CodeQL" alt="CodeQL"></a>
   <a href="https://github.com/dcondrey/rideshare/blob/main/LICENSE"><img src="https://img.shields.io/github/license/dcondrey/rideshare?style=flat-square&labelColor=20232a&color=007ec6&label=license" alt="License"></a>
   <a href="https://github.com/dcondrey/rideshare/blob/main/CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/code%20of%20conduct-Contributor%20Covenant%202.1-6a4c93?style=flat-square&labelColor=20232a" alt="Code of Conduct"></a>
