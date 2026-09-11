@@ -9,6 +9,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Restore CI and OpenSSF badges
+- Fix README header rendering and badge accuracy
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
@@ -28,6 +31,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Remove the last bare any casts, all six CI gates green
+- Bring the Biome gate back to green
+- Typecheck clean under checkJs
+- Make the typecheck gate real and start clearing it
+- Clear the license-header, banned-pattern and CSP gates
 - Give the CI boot smoke job the env vars lib/config.js requires
 - Run CI tests via node --test discovery and repair the dead html tests
 - Stop .gitignore from excluding source files named allowlist*
@@ -36,4 +44,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Harden setPath() against prototype pollution (#7)
 - Escape/validate untrusted map config before DOM insertion (#6)
 - Prevent log injection and tainted-format-string in error logging (#5)
+
+### Style
+- Apply the repo's Biome formatting and safe lint fixes
 
