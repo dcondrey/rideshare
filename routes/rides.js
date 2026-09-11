@@ -124,6 +124,7 @@ get("/rides", async (ctx) => {
     layout({
       title: "Browse rides",
       user,
+      path: ctx.pathname,
       children: html`
         <section class="page-head">
           <div>
@@ -183,7 +184,7 @@ get("/rides", async (ctx) => {
 get("/rides/new", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
-  ctx.html(layout({ title: "Post a ride", user, children: postForm({}) }));
+  ctx.html(layout({ title: "Post a ride", user, path: ctx.pathname, children: postForm({}) }));
 });
 
 post("/rides/new", async (ctx) => {
@@ -355,6 +356,7 @@ get("/rides/mine", async (ctx) => {
     layout({
       title: "My rides",
       user,
+      path: ctx.pathname,
       children: html`
         <section class="page-head">
           <h1>My rides</h1>
@@ -523,7 +525,7 @@ get("/rides/:id", async (ctx) => {
                                       ${hasConfirmed(ride.id, user.id) ? "disabled" : ""}>
                                 ${hasConfirmed(ride.id, user.id) ? "✓ You've confirmed" : "I made this ride →"}
                               </button>
-                              <span class="confirm-status" data-confirm-status></span>
+                              <span class="confirm-status" data-confirm-status aria-live="polite"></span>
                             </div>`
                           : ""
                       }`
@@ -548,7 +550,7 @@ get("/rides/:id", async (ctx) => {
                                   ${hasConfirmed(ride.id, user.id) ? "disabled" : ""}>
                             ${hasConfirmed(ride.id, user.id) ? "✓ You've confirmed" : "I made this ride →"}
                           </button>
-                          <span class="confirm-status" data-confirm-status></span>
+                          <span class="confirm-status" data-confirm-status aria-live="polite"></span>
                         </div>`
                       : myClaim.status === "pending"
                         ? html`<p class="muted">Waiting for the poster to accept or decline.</p>

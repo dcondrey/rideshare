@@ -118,6 +118,7 @@ get("/map", async (ctx) => {
     layout({
       title: "Map",
       user: ctx.user,
+      path: ctx.pathname,
       children: html`
         <section class="page-head">
           <div>

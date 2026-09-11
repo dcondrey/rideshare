@@ -266,6 +266,7 @@
     this._closePopup();
     const pop = el("div", "tm-popup", this.popupsLayer);
     pop.setAttribute("role", "dialog");
+    pop.setAttribute("tabindex", "-1");
     pop.innerHTML =
       '<button type="button" class="tm-popup-close" aria-label="Close">×</button>' +
       '<div class="tm-popup-body">' +
@@ -276,14 +277,17 @@
     });
     this.openPopup = { marker: m, node: pop, anchor: anchor };
     this._positionPopup(this.openPopup);
+    pop.querySelector(".tm-popup-close").focus();
   };
 
   TinyMap.prototype._closePopup = function () {
     if (!this.openPopup) return;
+    const anchor = this.openPopup.anchor;
     if (this.openPopup.node.parentNode) {
       this.openPopup.node.parentNode.removeChild(this.openPopup.node);
     }
     this.openPopup = null;
+    if (anchor?.isConnected) anchor.focus();
   };
 
   TinyMap.prototype._positionPopup = function (popup) {

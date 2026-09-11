@@ -56,6 +56,7 @@ get("/trust", async (ctx) => {
     layout({
       title: "Portable trust",
       user,
+      path: ctx.pathname,
       children: html`
         <section class="page-head">
           <h1>Portable trust</h1>

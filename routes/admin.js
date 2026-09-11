@@ -67,6 +67,7 @@ get("/admin", async (ctx) => {
     layout({
       title: "Admin",
       user,
+      path: ctx.pathname,
       children: html`
         <section class="page-head">
           <h1>Admin dashboard</h1>

@@ -507,6 +507,8 @@ fieldset legend {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	min-height: 44px;
+	min-width: 44px;
 	padding: 0.55rem 1rem;
 	border: 1px solid var(--border-strong);
 	background: var(--surface);
@@ -841,6 +843,17 @@ fieldset legend {
 		filter 0.12s;
 	will-change: transform;
 }
+/* Invisible hit-area enlarging the tap target to 44px without growing the
+   visible glyph, centered on the marker's own (unchanged) box. */
+.tm-marker::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(44px, 100%);
+	height: max(44px, 100%);
+	transform: translate(-50%, -50%);
+}
 .tm-marker:hover {
 	filter: brightness(1.1);
 }
@@ -926,8 +939,10 @@ fieldset legend {
 	pointer-events: auto;
 }
 .tm-zoom {
-	width: 32px;
-	height: 32px;
+	width: 44px;
+	height: 44px;
+	min-width: 44px;
+	min-height: 44px;
 	background: var(--surface);
 	color: var(--text);
 	border: 1px solid var(--border-strong);

@@ -17,6 +17,7 @@ import {
 } from "../lib/auth.js";
 import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
+import { error as logError } from "../lib/log.js";
 import { get, post } from "../lib/router.js";
 import { email as emailField } from "../lib/validate.js";
 
@@ -89,7 +90,7 @@ post("/auth/send", async (ctx) => {
   }
   // Fire-and-forget so timing of the redirect doesn't depend on send latency.
   startMagicLink(address, ctx.ip()).catch((err) =>
-    console.error("[auth] magic-link send failed:", err.message),
+    logError("magic-link send failed", { component: "auth", err }),
   );
   ctx.redirect("/auth/check");
 });
