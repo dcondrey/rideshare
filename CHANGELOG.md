@@ -9,6 +9,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Restore CI and OpenSSF badges
 - Fix README header rendering and badge accuracy
 - Update changelog [skip ci]
@@ -31,6 +32,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Run tsc through npx -p so the typecheck step executes
 - Remove the last bare any casts, all six CI gates green
 - Bring the Biome gate back to green
 - Typecheck clean under checkJs
