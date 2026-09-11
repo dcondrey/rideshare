@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Custom slippy-map renderer. Zero dependencies.
 //
 // Renders tile-based maps (any standard XYZ provider), with pan, wheel zoom,

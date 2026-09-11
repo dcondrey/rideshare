@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Tiny progressive-enhancement script.
 // Loaded with `defer` and only hooks up things that benefit from JS.
 (function () {

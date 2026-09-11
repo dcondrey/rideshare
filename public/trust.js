@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Browser-side portable trust: did:key generation, signing, IndexedDB
 // storage, bind/import/export flows.
 //

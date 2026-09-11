@@ -8,6 +8,10 @@
  *   /static/<file> and /static/lib/<file>
  *     → served from public/ and public/lib/ (generic, safe).
  *
+ *   /brand.css
+ *     → the single event brand colour as a custom property, served as a file so
+ *       the page needs no inline <style> and the CSP can forbid inline styles.
+ *
  *   /logo
  *     → served from the assets table in the DB (uploaded via /admin/config).
  *       Falls back to 404 (the layout omits the <img> tag if no logo exists).
@@ -19,6 +23,7 @@ import { resolve, extname } from "node:path";
 import { get } from "../lib/router.js";
 import { config } from "../lib/config.js";
 import { getAsset } from "../lib/assets.js";
+import { getEventConfig } from "../lib/event-config.js";
 
 const PUBLIC_DIR = resolve(config.rootDir, "public");
 
@@ -79,6 +84,18 @@ for (const name of [
     serveFile(ctx, abs);
   });
 }
+
+get("/brand.css", async (ctx) => {
+  const event = getEventConfig();
+  const brandColor = event.brand?.primaryColor || "#4f46e5";
+  // The value is validated as a colour by the event-config loader; escape the
+  // two characters that could close the declaration regardless.
+  const safe = String(brandColor).replace(/[<>{}"';]/g, "");
+  ctx.res.statusCode = 200;
+  ctx.res.setHeader("Content-Type", "text/css; charset=utf-8");
+  ctx.res.setHeader("Cache-Control", "no-cache");
+  ctx.res.end(`:root { --brand: ${safe}; }\n`);
+});
 
 /** Generic /static/* — covers public/lib/leaflet.{js,css}, custom logos, etc. */
 get("/static/:name", async (ctx) => {

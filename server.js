@@ -48,7 +48,7 @@ const server = createServer((req, res) => {
 server.listen(config.port, () => {
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : config.port;
-  console.log(
+  console.info(
     `\n  ✓ ${config.event.name} Rideshare ready\n` +
       `    Local:    http://localhost:${port}\n` +
       `    Public:   ${config.appUrl}\n` +
@@ -60,9 +60,9 @@ server.listen(config.port, () => {
 
 // Graceful shutdown so the HTTP server drains and SQLite gets a clean close.
 function shutdown(signal) {
-  console.log(`\n[server] received ${signal}, shutting down…`);
+  console.info(`\n[server] received ${signal}, shutting down…`);
   server.close(() => {
-    console.log("[server] closed");
+    console.info("[server] closed");
     process.exit(0);
   });
   // Force-exit after 10s in case a hung connection blocks close.
