@@ -74,7 +74,7 @@ jobs:
           fi
 
       - name: Run TypeScript in --noEmit mode
-        # Pinned to TS 5 line via npx so we never silently jump major versions.
+        # Pinned exactly so a new Biome release cannot fail CI on its own schedule.
         run: npx --yes typescript@5 tsc --noEmit -p tsconfig.json
 
   lint:
@@ -91,7 +91,7 @@ jobs:
 
       - name: Run Biome CI (lint + format check + import sort)
         # `biome ci` is the strict, non-fixing mode meant for CI — fails on any diff.
-        run: npx --yes @biomejs/biome@2 ci .
+        run: npx --yes @biomejs/biome@2.5.13 ci .
 
   license-headers:
     name: license-headers

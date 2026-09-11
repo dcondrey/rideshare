@@ -30,153 +30,126 @@ setupTestEnv();
 import { parseAllowlistCsv } from "../../lib/allowlist.js";
 
 describe("parseAllowlistCsv — basic shapes", () => {
-	it("parses a single-column file (one email per line, no header)", () => {
-		const out = parseAllowlistCsv(
-			["alice@example.com", "bob@example.com", "carol@example.com"].join("\n"),
-		);
-		assert.deepEqual(out.emails.sort(), [
-			"alice@example.com",
-			"bob@example.com",
-			"carol@example.com",
-		]);
-		assert.equal(out.skipped, 0);
-	});
+  it("parses a single-column file (one email per line, no header)", () => {
+    const out = parseAllowlistCsv(
+      ["alice@example.com", "bob@example.com", "carol@example.com"].join("\n"),
+    );
+    assert.deepEqual(out.emails.sort(), [
+      "alice@example.com",
+      "bob@example.com",
+      "carol@example.com",
+    ]);
+    assert.equal(out.skipped, 0);
+  });
 
-	it("parses a multi-column file with an `email` header", () => {
-		const csv = [
-			"first_name,last_name,email,role",
-			"Alice,Anderson,alice@example.com,attendee",
-			"Bob,Bauer,bob@example.com,speaker",
-		].join("\n");
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails.sort(), [
-			"alice@example.com",
-			"bob@example.com",
-		]);
-		assert.equal(out.skipped, 0);
-	});
+  it("parses a multi-column file with an `email` header", () => {
+    const csv = [
+      "first_name,last_name,email,role",
+      "Alice,Anderson,alice@example.com,attendee",
+      "Bob,Bauer,bob@example.com,speaker",
+    ].join("\n");
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails.sort(), ["alice@example.com", "bob@example.com"]);
+    assert.equal(out.skipped, 0);
+  });
 
-	it("parses a multi-column file without a header (autodetects email column)", () => {
-		const csv = [
-			"Alice,Anderson,alice@example.com",
-			"Bob,Bauer,bob@example.com",
-		].join("\n");
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails.sort(), [
-			"alice@example.com",
-			"bob@example.com",
-		]);
-	});
+  it("parses a multi-column file without a header (autodetects email column)", () => {
+    const csv = ["Alice,Anderson,alice@example.com", "Bob,Bauer,bob@example.com"].join("\n");
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails.sort(), ["alice@example.com", "bob@example.com"]);
+  });
 });
 
 describe("parseAllowlistCsv — quoted fields and escapes", () => {
-	it("handles quoted fields containing commas", () => {
-		const csv = [
-			`name,email`,
-			`"Anderson, Alice",alice@example.com`,
-			`"Bauer, Bob",bob@example.com`,
-		].join("\n");
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails.sort(), [
-			"alice@example.com",
-			"bob@example.com",
-		]);
-	});
+  it("handles quoted fields containing commas", () => {
+    const csv = [
+      `name,email`,
+      `"Anderson, Alice",alice@example.com`,
+      `"Bauer, Bob",bob@example.com`,
+    ].join("\n");
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails.sort(), ["alice@example.com", "bob@example.com"]);
+  });
 
-	it('handles quoted fields with escaped quotes ("")', () => {
-		const csv = [`name,email`, `"She said ""hi""",alice@example.com`].join(
-			"\n",
-		);
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails, ["alice@example.com"]);
-	});
+  it('handles quoted fields with escaped quotes ("")', () => {
+    const csv = [`name,email`, `"She said ""hi""",alice@example.com`].join("\n");
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails, ["alice@example.com"]);
+  });
 });
 
 describe("parseAllowlistCsv — file-level concerns", () => {
-	it("strips a leading UTF-8 BOM", () => {
-		const csv = "﻿email\nalice@example.com";
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails, ["alice@example.com"]);
-	});
+  it("strips a leading UTF-8 BOM", () => {
+    const csv = "﻿email\nalice@example.com";
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails, ["alice@example.com"]);
+  });
 
-	it("handles CRLF line endings", () => {
-		const csv = "email\r\nalice@example.com\r\nbob@example.com\r\n";
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails.sort(), [
-			"alice@example.com",
-			"bob@example.com",
-		]);
-	});
+  it("handles CRLF line endings", () => {
+    const csv = "email\r\nalice@example.com\r\nbob@example.com\r\n";
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails.sort(), ["alice@example.com", "bob@example.com"]);
+  });
 
-	it("handles mixed CRLF / LF line endings", () => {
-		const csv =
-			"email\nalice@example.com\r\nbob@example.com\ncarol@example.com\r\n";
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails.sort(), [
-			"alice@example.com",
-			"bob@example.com",
-			"carol@example.com",
-		]);
-	});
+  it("handles mixed CRLF / LF line endings", () => {
+    const csv = "email\nalice@example.com\r\nbob@example.com\ncarol@example.com\r\n";
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails.sort(), [
+      "alice@example.com",
+      "bob@example.com",
+      "carol@example.com",
+    ]);
+  });
 
-	it("ignores blank lines anywhere in the file", () => {
-		const csv = "\nemail\n\nalice@example.com\n\n\nbob@example.com\n\n";
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails.sort(), [
-			"alice@example.com",
-			"bob@example.com",
-		]);
-	});
+  it("ignores blank lines anywhere in the file", () => {
+    const csv = "\nemail\n\nalice@example.com\n\n\nbob@example.com\n\n";
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails.sort(), ["alice@example.com", "bob@example.com"]);
+  });
 });
 
 describe("parseAllowlistCsv — dedup + invalid handling", () => {
-	it("dedupes after normalization (gmail dots/+tags)", () => {
-		// alice+conf@gmail.com, a.l.i.c.e@gmail.com, ALICE@gmail.com all → alice@gmail.com
-		const csv = [
-			"email",
-			"alice+conf@gmail.com",
-			"a.l.i.c.e@gmail.com",
-			"ALICE@gmail.com",
-			"alice@gmail.com",
-			"bob@example.com",
-		].join("\n");
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(
-			out.emails.sort(),
-			["alice@gmail.com", "bob@example.com"].sort(),
-		);
-	});
+  it("dedupes after normalization (gmail dots/+tags)", () => {
+    // alice+conf@gmail.com, a.l.i.c.e@gmail.com, ALICE@gmail.com all → alice@gmail.com
+    const csv = [
+      "email",
+      "alice+conf@gmail.com",
+      "a.l.i.c.e@gmail.com",
+      "ALICE@gmail.com",
+      "alice@gmail.com",
+      "bob@example.com",
+    ].join("\n");
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails.sort(), ["alice@gmail.com", "bob@example.com"].sort());
+  });
 
-	it("skips invalid email rows and reports the count via `skipped`", () => {
-		const csv = [
-			"email",
-			"alice@example.com",
-			"not-an-email",
-			"",
-			"bob@example.com",
-			"@example.com",
-			"carol@example.com",
-		].join("\n");
-		const out = parseAllowlistCsv(csv);
-		assert.deepEqual(out.emails.sort(), [
-			"alice@example.com",
-			"bob@example.com",
-			"carol@example.com",
-		]);
-		assert.ok(
-			(out.skipped ?? 0) >= 2,
-			`expected at least 2 skipped, got ${out.skipped}`,
-		);
-	});
+  it("skips invalid email rows and reports the count via `skipped`", () => {
+    const csv = [
+      "email",
+      "alice@example.com",
+      "not-an-email",
+      "",
+      "bob@example.com",
+      "@example.com",
+      "carol@example.com",
+    ].join("\n");
+    const out = parseAllowlistCsv(csv);
+    assert.deepEqual(out.emails.sort(), [
+      "alice@example.com",
+      "bob@example.com",
+      "carol@example.com",
+    ]);
+    assert.ok((out.skipped ?? 0) >= 2, `expected at least 2 skipped, got ${out.skipped}`);
+  });
 });
 
 describe("parseAllowlistCsv — stress", () => {
-	it("imports 1000 unique emails without crashing", () => {
-		const rows = ["email"];
-		for (let i = 0; i < 1000; i++) rows.push(`user${i}@example.com`);
-		const csv = rows.join("\n");
-		const out = parseAllowlistCsv(csv);
-		assert.equal(out.emails.length, 1000);
-		assert.equal(out.skipped, 0);
-	});
+  it("imports 1000 unique emails without crashing", () => {
+    const rows = ["email"];
+    for (let i = 0; i < 1000; i++) rows.push(`user${i}@example.com`);
+    const csv = rows.join("\n");
+    const out = parseAllowlistCsv(csv);
+    assert.equal(out.emails.length, 1000);
+    assert.equal(out.skipped, 0);
+  });
 });

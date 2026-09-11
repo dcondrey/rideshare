@@ -23,18 +23,21 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  */
 let cachedSchemaSql = null;
 function loadSchemaSql() {
-	if (cachedSchemaSql) return cachedSchemaSql;
-	const dbModule = readFileSync(resolve(__dirname, "../../lib/db.js"), "utf8");
-	const blocks = [];
-	// Match db.exec(`...`) blocks anywhere in the file
-	const re = /db\.exec\(`([\s\S]*?)`\)/g;
-	let m;
-	while ((m = re.exec(dbModule)) !== null) blocks.push(m[1]);
-	if (blocks.length === 0) {
-		throw new Error("Could not find db.exec(`...`) blocks in lib/db.js");
-	}
-	cachedSchemaSql = blocks.join("\n");
-	return cachedSchemaSql;
+  if (cachedSchemaSql) return cachedSchemaSql;
+  const dbModule = readFileSync(resolve(__dirname, "../../lib/db.js"), "utf8");
+  const blocks = [];
+  // Match db.exec(`...`) blocks anywhere in the file
+  const re = /db\.exec\(`([\s\S]*?)`\)/g;
+  for (;;) {
+    const m = re.exec(dbModule);
+    if (m === null) break;
+    blocks.push(m[1]);
+  }
+  if (blocks.length === 0) {
+    throw new Error("Could not find db.exec(`...`) blocks in lib/db.js");
+  }
+  cachedSchemaSql = blocks.join("\n");
+  return cachedSchemaSql;
 }
 
 /**
@@ -42,13 +45,13 @@ function loadSchemaSql() {
  * @returns {DatabaseSync}
  */
 export function freshDb() {
-	const db = new DatabaseSync(":memory:");
-	db.exec("PRAGMA journal_mode = MEMORY;");
-	db.exec("PRAGMA foreign_keys = ON;");
-	db.exec("PRAGMA synchronous = NORMAL;");
-	db.exec(loadSchemaSql());
-	// Seed schema_version
-	const v = db.prepare("SELECT version FROM schema_version LIMIT 1").get();
-	if (!v) db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(2);
-	return db;
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA journal_mode = MEMORY;");
+  db.exec("PRAGMA foreign_keys = ON;");
+  db.exec("PRAGMA synchronous = NORMAL;");
+  db.exec(loadSchemaSql());
+  // Seed schema_version
+  const v = db.prepare("SELECT version FROM schema_version LIMIT 1").get();
+  if (!v) db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(2);
+  return db;
 }

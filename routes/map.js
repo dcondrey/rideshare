@@ -14,115 +14,111 @@ import { browseRides } from "../lib/rides.js";
 import { get } from "../lib/router.js";
 
 get("/map", async (ctx) => {
-	if (!ctx.user) {
-		ctx.redirect("/");
-		return;
-	}
-	const event = getEventConfig();
-	const styles = listStyles();
-	const requested = (ctx.query.style ?? event.map?.style) || "voyager";
-	const style = resolveStyle(requested, {
-		customTileUrl: event.map?.customTileUrl,
-		customAttribution: event.map?.customAttribution,
-	});
+  if (!ctx.user) {
+    ctx.redirect("/");
+    return;
+  }
+  const event = getEventConfig();
+  const styles = listStyles();
+  const requested = (ctx.query.style ?? event.map?.style) || "voyager";
+  const style = resolveStyle(requested, {
+    customTileUrl: event.map?.customTileUrl,
+    customAttribution: event.map?.customAttribution,
+  });
 
-	const meetups = listMeetups();
+  const meetups = listMeetups();
 
-	// Build ride pins. Each ride is plotted at, in priority order:
-	//   1. its custom pickup_lat/lng,
-	//   2. its referenced meetup's coordinates,
-	//   3. the airport's coordinates,
-	//   4. the venue (for "from venue" rides without other location).
-	const airportCoords = new Map(
-		(event.airports || [])
-			.filter((a) => Number.isFinite(a.lat) && Number.isFinite(a.lng))
-			.map((a) => [a.code, { lat: a.lat, lng: a.lng, name: a.name }]),
-	);
-	const meetupCoords = new Map(
-		meetups.map((m) => [m.id, { lat: m.lat, lng: m.lng, name: m.name }]),
-	);
-	const venueCoord =
-		Number.isFinite(event.venue?.lat) && Number.isFinite(event.venue?.lng)
-			? {
-					lat: event.venue.lat,
-					lng: event.venue.lng,
-					name: event.venue.name || "Venue",
-				}
-			: null;
+  // Build ride pins. Each ride is plotted at, in priority order:
+  //   1. its custom pickup_lat/lng,
+  //   2. its referenced meetup's coordinates,
+  //   3. the airport's coordinates,
+  //   4. the venue (for "from venue" rides without other location).
+  const airportCoords = new Map(
+    (event.airports || [])
+      .filter((a) => Number.isFinite(a.lat) && Number.isFinite(a.lng))
+      .map((a) => [a.code, { lat: a.lat, lng: a.lng, name: a.name }]),
+  );
+  const meetupCoords = new Map(
+    meetups.map((m) => [m.id, { lat: m.lat, lng: m.lng, name: m.name }]),
+  );
+  const venueCoord =
+    Number.isFinite(event.venue?.lat) && Number.isFinite(event.venue?.lng)
+      ? {
+          lat: event.venue.lat,
+          lng: event.venue.lng,
+          name: event.venue.name || "Venue",
+        }
+      : null;
 
-	const ridePins = browseRides({})
-		.map((r) => {
-			let coord = null;
-			let source = "";
-			if (Number.isFinite(r.pickup_lat) && Number.isFinite(r.pickup_lng)) {
-				coord = { lat: r.pickup_lat, lng: r.pickup_lng };
-				source = "Custom pin";
-			} else if (r.meetup_id && meetupCoords.get(r.meetup_id)) {
-				const m = /** @type {{ lat: number, lng: number, name: string }} */ (
-					meetupCoords.get(r.meetup_id)
-				);
-				coord = { lat: m.lat, lng: m.lng };
-				source = m.name;
-			} else if (airportCoords.has(r.airport)) {
-				const a = airportCoords.get(r.airport);
-				coord = { lat: a.lat, lng: a.lng };
-				source = `${r.airport} — ${a.name}`;
-			} else if (r.direction === "from_venue" && venueCoord) {
-				coord = { lat: venueCoord.lat, lng: venueCoord.lng };
-				source = venueCoord.name;
-			}
-			if (!coord) return null;
-			return {
-				id: r.id,
-				kind: r.kind,
-				direction: r.direction,
-				date: r.depart_date,
-				time: r.depart_time,
-				seats: r.seats,
-				notes: r.notes || "",
-				url: `/rides/${r.id}`,
-				source,
-				...coord,
-			};
-		})
-		.filter(Boolean);
+  const ridePins = browseRides({})
+    .map((r) => {
+      let coord = null;
+      let source = "";
+      if (Number.isFinite(r.pickup_lat) && Number.isFinite(r.pickup_lng)) {
+        coord = { lat: r.pickup_lat, lng: r.pickup_lng };
+        source = "Custom pin";
+      } else if (r.meetup_id && meetupCoords.get(r.meetup_id)) {
+        const m = /** @type {{ lat: number, lng: number, name: string }} */ (
+          meetupCoords.get(r.meetup_id)
+        );
+        coord = { lat: m.lat, lng: m.lng };
+        source = m.name;
+      } else if (airportCoords.has(r.airport)) {
+        const a = airportCoords.get(r.airport);
+        coord = { lat: a.lat, lng: a.lng };
+        source = `${r.airport} — ${a.name}`;
+      } else if (r.direction === "from_venue" && venueCoord) {
+        coord = { lat: venueCoord.lat, lng: venueCoord.lng };
+        source = venueCoord.name;
+      }
+      if (!coord) return null;
+      return {
+        id: r.id,
+        kind: r.kind,
+        direction: r.direction,
+        date: r.depart_date,
+        time: r.depart_time,
+        seats: r.seats,
+        notes: r.notes || "",
+        url: `/rides/${r.id}`,
+        source,
+        ...coord,
+      };
+    })
+    .filter(Boolean);
 
-	const venuePin = venueCoord
-		? { ...venueCoord, address: event.venue?.address || "" }
-		: null;
-	const meetupPins = meetups.map((m) => ({
-		id: m.id,
-		name: m.name,
-		address: m.address || "",
-		lat: m.lat,
-		lng: m.lng,
-	}));
+  const venuePin = venueCoord ? { ...venueCoord, address: event.venue?.address || "" } : null;
+  const meetupPins = meetups.map((m) => ({
+    id: m.id,
+    name: m.name,
+    address: m.address || "",
+    lat: m.lat,
+    lng: m.lng,
+  }));
 
-	const center = venueCoord ?? { lat: 37.7749, lng: -122.4194 };
-	const zoom = Number.isFinite(event.map?.defaultZoom)
-		? event.map.defaultZoom
-		: 11;
+  const center = venueCoord ?? { lat: 37.7749, lng: -122.4194 };
+  const zoom = Number.isFinite(event.map?.defaultZoom) ? event.map.defaultZoom : 11;
 
-	const mapData = {
-		center,
-		zoom,
-		tile: {
-			url: style.url,
-			subdomains: style.subdomains || [],
-			attribution: style.attribution,
-			maxZoom: style.maxZoom || 19,
-		},
-		venue: venuePin,
-		meetups: meetupPins,
-		rides: ridePins,
-		brandColor: event.brand?.primaryColor || "#4f46e5",
-	};
+  const mapData = {
+    center,
+    zoom,
+    tile: {
+      url: style.url,
+      subdomains: style.subdomains || [],
+      attribution: style.attribution,
+      maxZoom: style.maxZoom || 19,
+    },
+    venue: venuePin,
+    meetups: meetupPins,
+    rides: ridePins,
+    brandColor: event.brand?.primaryColor || "#4f46e5",
+  };
 
-	ctx.html(
-		layout({
-			title: "Map",
-			user: ctx.user,
-			children: html`
+  ctx.html(
+    layout({
+      title: "Map",
+      user: ctx.user,
+      children: html`
         <section class="page-head">
           <div>
             <h1>Map</h1>
@@ -137,14 +133,14 @@ get("/map", async (ctx) => {
               <span class="muted small">Style</span>
               <select name="style" onchange="this.form.submit()">
                 ${styles.map(
-									(s) =>
-										html`<option value="${s.key}" ${requested === s.key ? "selected" : ""}>${s.label}</option>`,
-								)}
+                  (s) =>
+                    html`<option value="${s.key}" ${requested === s.key ? "selected" : ""}>${s.label}</option>`,
+                )}
                 ${
-									event.map?.customTileUrl
-										? html`<option value="custom" ${requested === "custom" ? "selected" : ""}>Custom (config)</option>`
-										: ""
-								}
+                  event.map?.customTileUrl
+                    ? html`<option value="custom" ${requested === "custom" ? "selected" : ""}>Custom (config)</option>`
+                    : ""
+                }
               </select>
             </label>
             <noscript><button type="submit" class="button">Apply</button></noscript>
@@ -171,8 +167,8 @@ get("/map", async (ctx) => {
         <script id="map-data" type="application/json">${raw(jsonScriptSafe(mapData))}</script>
         <script src="/map.js" defer></script>
       `,
-		}),
-	);
+    }),
+  );
 });
 
 // Regex literals can't contain raw U+2028 / U+2029 (they terminate JS source
@@ -186,10 +182,10 @@ const PS = /\u2029/g;
  * Line/Paragraph Separator chars (which break in JS string literals).
  */
 function jsonScriptSafe(obj) {
-	return JSON.stringify(obj)
-		.replace(/</g, "\\u003c")
-		.replace(/>/g, "\\u003e")
-		.replace(/&/g, "\\u0026")
-		.replace(LS, "\\u2028")
-		.replace(PS, "\\u2029");
+  return JSON.stringify(obj)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(LS, "\\u2028")
+    .replace(PS, "\\u2029");
 }

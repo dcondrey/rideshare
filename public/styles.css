@@ -112,7 +112,6 @@ a:hover {
 }
 
 .site-header {
-	background: var(--surface);
 	border-bottom: 1px solid var(--border);
 	position: sticky;
 	top: 0;
@@ -372,10 +371,6 @@ code {
 	gap: 0.5rem;
 	align-items: end;
 }
-.row input,
-.row select {
-	flex: 1 1 200px;
-}
 
 label {
 	display: grid;
@@ -405,6 +400,11 @@ textarea {
 	transition:
 		border-color 0.15s,
 		box-shadow 0.15s;
+}
+
+.row input,
+.row select {
+	flex: 1 1 200px;
 }
 input:focus,
 select:focus,
@@ -501,10 +501,6 @@ fieldset legend {
 	flex: 1 1 140px;
 	font-size: 0.8rem;
 }
-.filter-bar .button,
-.filter-bar .link {
-	white-space: nowrap;
-}
 
 /* ─── Buttons ──────────────────────────────────────────────────────────── */
 .button {
@@ -557,6 +553,11 @@ fieldset legend {
 	color: var(--brand);
 	text-decoration: none;
 	font-weight: 500;
+}
+
+.filter-bar .button,
+.filter-bar .link {
+	white-space: nowrap;
 }
 .link:hover {
 	text-decoration: underline;
@@ -812,10 +813,6 @@ fieldset legend {
 .tm-popups {
 	pointer-events: none;
 }
-.tm-markers > .tm-marker,
-.tm-popups > .tm-popup {
-	pointer-events: auto;
-}
 
 .tm-tile {
 	position: absolute;
@@ -870,6 +867,11 @@ fieldset legend {
 	will-change: transform;
 	z-index: 2000;
 	animation: tm-popup-in 0.12s ease-out both;
+}
+
+.tm-markers > .tm-marker,
+.tm-popups > .tm-popup {
+	pointer-events: auto;
 }
 @keyframes tm-popup-in {
 	from {

@@ -13,32 +13,32 @@ let frozenAt = null;
 
 /** @param {number | string | Date} t */
 export function setNow(t) {
-	const ms = typeof t === "number" ? t : new RealDate(t).getTime();
-	frozenAt = ms;
-	Date.now = () => frozenAt;
-	// Patch the Date constructor so `new Date()` (no args) returns frozen time
-	/** @type {any} */
-	const FakeDate = (/** @type {any[]} */ ...args) => {
-		if (args.length === 0) return new RealDate(frozenAt);
-		// The shim forwards whatever the caller passed; RealDate's overloads are
-		// not expressible for a runtime-length argument list.
-		return Reflect.construct(RealDate, args);
-	};
-	FakeDate.now = () => frozenAt;
-	FakeDate.parse = RealDate.parse;
-	FakeDate.UTC = RealDate.UTC;
-	FakeDate.prototype = RealDate.prototype;
-	global.Date = FakeDate;
+  const ms = typeof t === "number" ? t : new RealDate(t).getTime();
+  frozenAt = ms;
+  Date.now = () => frozenAt;
+  // Patch the Date constructor so `new Date()` (no args) returns frozen time
+  /** @type {any} */
+  const FakeDate = (/** @type {any[]} */ ...args) => {
+    if (args.length === 0) return new RealDate(frozenAt);
+    // The shim forwards whatever the caller passed; RealDate's overloads are
+    // not expressible for a runtime-length argument list.
+    return Reflect.construct(RealDate, args);
+  };
+  FakeDate.now = () => frozenAt;
+  FakeDate.parse = RealDate.parse;
+  FakeDate.UTC = RealDate.UTC;
+  FakeDate.prototype = RealDate.prototype;
+  global.Date = FakeDate;
 }
 
 /** Advance the frozen clock by n milliseconds. */
 export function advance(ms) {
-	if (frozenAt == null) throw new Error("setNow() first");
-	frozenAt += ms;
+  if (frozenAt == null) throw new Error("setNow() first");
+  frozenAt += ms;
 }
 
 export function restoreClock() {
-	Date.now = realDateNow;
-	global.Date = RealDate;
-	frozenAt = null;
+  Date.now = realDateNow;
+  global.Date = RealDate;
+  frozenAt = null;
 }

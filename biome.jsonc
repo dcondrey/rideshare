@@ -1,8 +1,8 @@
 {
   // Biome 2.x configuration. Single dev dependency replaces ESLint + Prettier.
   // Biome's JSON parser accepts // line comments and /* block comments */ in
-  // biome.json (it's effectively JSONC), so we use them directly.
-  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+  // biome.jsonc, so we use them directly.
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
 
   "vcs": {
     "enabled": false,
@@ -21,14 +21,14 @@
       "server.js",
       "scripts/**/*.mjs",
       "scripts/**/*.js",
-      "biome.json",
+      "biome.jsonc",
       "tsconfig.json",
       "package.json",
-      "!data/**",
+      "!data",
       "!.env",
       "!**/*.md",
-      "!public/lib/**",
-      "!node_modules/**"
+      "!public/lib",
+      "!node_modules"
     ]
   },
 
@@ -81,7 +81,10 @@
       "recommended": true,
 
       "complexity": {
-        "noUselessFragments": "error",
+        "noUselessFragments": "error"
+      },
+
+      "performance": {
         "noBarrelFile": "off"
       },
 
@@ -99,7 +102,6 @@
       },
 
       "style": {
-        "noVar": "error",
         "useConst": "error",
         "useTemplate": "error",
         "useNodejsImportProtocol": "error"

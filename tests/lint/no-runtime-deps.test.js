@@ -19,17 +19,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_PATH = resolve(__dirname, "..", "..", "package.json");
 
 test("package.json has no runtime dependencies", async () => {
-	const raw = await readFile(PKG_PATH, "utf8");
-	/** @type {{ dependencies?: Record<string, string> }} */
-	const pkg = JSON.parse(raw);
+  const raw = await readFile(PKG_PATH, "utf8");
+  /** @type {{ dependencies?: Record<string, string> }} */
+  const pkg = JSON.parse(raw);
 
-	const deps = pkg.dependencies;
-	const empty =
-		deps === undefined ||
-		(typeof deps === "object" && Object.keys(deps).length === 0);
+  const deps = pkg.dependencies;
+  const empty = deps === undefined || (typeof deps === "object" && Object.keys(deps).length === 0);
 
-	assert.ok(
-		empty,
-		`Expected zero runtime dependencies, found: ${JSON.stringify(deps, null, 2)}`,
-	);
+  assert.ok(empty, `Expected zero runtime dependencies, found: ${JSON.stringify(deps, null, 2)}`);
 });

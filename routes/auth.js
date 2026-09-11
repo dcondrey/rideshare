@@ -9,11 +9,11 @@
  */
 
 import {
-	clearSessionCookieHeader,
-	consumeMagicLink,
-	sessionCookieHeader,
-	signOut,
-	startMagicLink,
+  clearSessionCookieHeader,
+  consumeMagicLink,
+  sessionCookieHeader,
+  signOut,
+  startMagicLink,
 } from "../lib/auth.js";
 import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
@@ -21,16 +21,16 @@ import { get, post } from "../lib/router.js";
 import { email as emailField } from "../lib/validate.js";
 
 get("/", async (ctx) => {
-	if (ctx.user) {
-		ctx.redirect("/rides");
-		return;
-	}
-	const event = getEventConfig();
-	ctx.html(
-		layout({
-			title: "Sign in",
-			user: null,
-			children: html`
+  if (ctx.user) {
+    ctx.redirect("/rides");
+    return;
+  }
+  const event = getEventConfig();
+  ctx.html(
+    layout({
+      title: "Sign in",
+      user: null,
+      children: html`
         <section class="hero">
           <h1 class="hero-title">${event.longName}</h1>
           <p class="hero-tagline">${event.tagline}</p>
@@ -55,13 +55,13 @@ get("/", async (ctx) => {
             <button type="submit" class="button button-primary">Send sign-in link</button>
           </form>
           ${
-						event.registrationUrl
-							? html`<p class="muted small">
+            event.registrationUrl
+              ? html`<p class="muted small">
                   Not yet registered for the event?
                   <a href="${event.registrationUrl}" rel="noopener">Register here</a>.
                 </p>`
-							: ""
-					}
+              : ""
+          }
         </section>
 
         <section class="how-it-works">
@@ -73,33 +73,33 @@ get("/", async (ctx) => {
           </ol>
         </section>
       `,
-		}),
-	);
+    }),
+  );
 });
 
 post("/auth/send", async (ctx) => {
-	const body = await ctx.formBody();
-	let address;
-	try {
-		address = emailField(body.email);
-	} catch {
-		// Same response for invalid input as for valid — don't leak.
-		ctx.redirect("/auth/check");
-		return;
-	}
-	// Fire-and-forget so timing of the redirect doesn't depend on send latency.
-	startMagicLink(address, ctx.ip()).catch((err) =>
-		console.error("[auth] magic-link send failed:", err.message),
-	);
-	ctx.redirect("/auth/check");
+  const body = await ctx.formBody();
+  let address;
+  try {
+    address = emailField(body.email);
+  } catch {
+    // Same response for invalid input as for valid — don't leak.
+    ctx.redirect("/auth/check");
+    return;
+  }
+  // Fire-and-forget so timing of the redirect doesn't depend on send latency.
+  startMagicLink(address, ctx.ip()).catch((err) =>
+    console.error("[auth] magic-link send failed:", err.message),
+  );
+  ctx.redirect("/auth/check");
 });
 
 get("/auth/check", async (ctx) => {
-	ctx.html(
-		layout({
-			title: "Check your email",
-			user: ctx.user,
-			children: html`
+  ctx.html(
+    layout({
+      title: "Check your email",
+      user: ctx.user,
+      children: html`
         <section class="card centered">
           <h1>Check your email</h1>
           <p class="muted">
@@ -112,40 +112,36 @@ get("/auth/check", async (ctx) => {
           <p><a href="/" class="button">Back</a></p>
         </section>
       `,
-		}),
-	);
+    }),
+  );
 });
 
 get("/auth/callback", async (ctx) => {
-	const token = ctx.query.token || "";
-	const result = consumeMagicLink(
-		token,
-		ctx.ip(),
-		String(ctx.req.headers["user-agent"] || ""),
-	);
-	if (!result.ok) {
-		ctx.html(
-			layout({
-				title: "Sign-in failed",
-				user: null,
-				children: html`
+  const token = ctx.query.token || "";
+  const result = consumeMagicLink(token, ctx.ip(), String(ctx.req.headers["user-agent"] || ""));
+  if (!result.ok) {
+    ctx.html(
+      layout({
+        title: "Sign-in failed",
+        user: null,
+        children: html`
           <section class="card centered">
             <h1>That link didn't work</h1>
             <p class="muted">${result.reason}</p>
             <p><a href="/" class="button button-primary">Request a new link</a></p>
           </section>
         `,
-			}),
-			400,
-		);
-		return;
-	}
-	ctx.redirect("/rides", 303, {
-		"Set-Cookie": sessionCookieHeader(result.sessionId),
-	});
+      }),
+      400,
+    );
+    return;
+  }
+  ctx.redirect("/rides", 303, {
+    "Set-Cookie": sessionCookieHeader(result.sessionId),
+  });
 });
 
 post("/auth/signout", async (ctx) => {
-	signOut(ctx.req);
-	ctx.redirect("/", 303, { "Set-Cookie": clearSessionCookieHeader() });
+  signOut(ctx.req);
+  ctx.redirect("/", 303, { "Set-Cookie": clearSessionCookieHeader() });
 });

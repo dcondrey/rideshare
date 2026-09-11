@@ -22,67 +22,60 @@ import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
 import { listMeetups } from "../lib/meetups.js";
 import {
-	browseRides,
-	claimsByUser,
-	claimsForRide,
-	createClaim,
-	createRide,
-	decideClaim,
-	getRide,
-	ridesPostedBy,
-	updateRideStatus,
-	updateUserProfile,
-	withdrawClaim,
+  browseRides,
+  claimsByUser,
+  claimsForRide,
+  createClaim,
+  createRide,
+  decideClaim,
+  getRide,
+  ridesPostedBy,
+  updateRideStatus,
+  updateUserProfile,
+  withdrawClaim,
 } from "../lib/rides.js";
 import { get, post } from "../lib/router.js";
 import { trustBadgeFor } from "../lib/trust.js";
-import {
-	hhmm,
-	isoDate,
-	oneOf,
-	optString,
-	reqInt,
-	reqString,
-} from "../lib/validate.js";
+import { hhmm, isoDate, oneOf, optString, reqInt, reqString } from "../lib/validate.js";
 
 // Helpers ────────────────────────────────────────────────────────────────────
 function requireUser(ctx) {
-	if (!ctx.user) {
-		ctx.redirect("/");
-		return null;
-	}
-	return ctx.user;
+  if (!ctx.user) {
+    ctx.redirect("/");
+    return null;
+  }
+  return ctx.user;
 }
 
 function airportName(code) {
-	const a = getEventConfig().airports.find((x) => x.code === code);
-	return a ? `${a.code} — ${a.name}` : code;
+  const a = getEventConfig().airports.find((x) => x.code === code);
+  return a ? `${a.code} — ${a.name}` : code;
 }
 function directionLabel(d) {
-	return d === "to_venue" ? "→ to venue" : "← from venue";
+  return d === "to_venue" ? "→ to venue" : "← from venue";
 }
 function kindLabel(k) {
-	return k === "offer" ? "Offering a ride" : "Looking for a ride";
+  return k === "offer" ? "Offering a ride" : "Looking for a ride";
 }
 function fmtDateTime(date, time) {
-	return `${date} · ${time}`;
+  return `${date} · ${time}`;
 }
 
 function rideCard(ride, { showActions = true } = {}) {
-	const trust = trustBadgeFor(ride.user_id);
-	return html`
+  const trust = trustBadgeFor(ride.user_id);
+  return html`
     <article class="ride-card">
       <header class="ride-card-head">
         <span class="badge badge-${ride.kind}">${kindLabel(ride.kind)}</span>
         <span class="ride-card-direction">${directionLabel(ride.direction)}</span>
         ${
-					trust
-						? html`<span class="trust-badge"
+          trust
+            ? html`<span class="trust-badge"
                 title="${trust.totalCredentials} confirmed ride${trust.totalCredentials === 1 ? "" : "s"} across ${trust.distinctEvents} event${trust.distinctEvents === 1 ? "" : "s"}">
                 ✓ ${trust.totalCredentials}
               </span>`
-						: ""
-				}
+            : ""
+        }
       </header>
       <h3 class="ride-card-title">
         <a href="/rides/${ride.id}">${airportName(ride.airport)}</a>
@@ -100,38 +93,38 @@ function rideCard(ride, { showActions = true } = {}) {
 
 /** Mask email for display before contact reveal. */
 function maskEmail(email) {
-	const at = email.indexOf("@");
-	if (at < 2) return "—";
-	return `${email[0]}•••${email.slice(at - 1)}`;
+  const at = email.indexOf("@");
+  if (at < 2) return "—";
+  return `${email[0]}•••${email.slice(at - 1)}`;
 }
 
 // ── Browse ───────────────────────────────────────────────────────────────────
 get("/rides", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	const event = getEventConfig();
-	const q = ctx.query;
-	const filters = {
-		kind: /** @type {'offer'|'request'|'any'} */ (
-			["offer", "request"].includes(q.kind) ? q.kind : "any"
-		),
-		direction: /** @type {'to_venue'|'from_venue'|'any'} */ (
-			["to_venue", "from_venue"].includes(q.direction) ? q.direction : "any"
-		),
-		airport: q.airport || "any",
-		date: q.date || "any",
-	};
-	const rides = browseRides({
-		kind: filters.kind === "any" ? "any" : filters.kind,
-		direction: filters.direction === "any" ? "any" : filters.direction,
-		airport: filters.airport === "any" ? "any" : filters.airport,
-		date: filters.date === "any" ? "any" : filters.date,
-	});
-	ctx.html(
-		layout({
-			title: "Browse rides",
-			user,
-			children: html`
+  const user = requireUser(ctx);
+  if (!user) return;
+  const event = getEventConfig();
+  const q = ctx.query;
+  const filters = {
+    kind: /** @type {'offer'|'request'|'any'} */ (
+      ["offer", "request"].includes(q.kind) ? q.kind : "any"
+    ),
+    direction: /** @type {'to_venue'|'from_venue'|'any'} */ (
+      ["to_venue", "from_venue"].includes(q.direction) ? q.direction : "any"
+    ),
+    airport: q.airport || "any",
+    date: q.date || "any",
+  };
+  const rides = browseRides({
+    kind: filters.kind === "any" ? "any" : filters.kind,
+    direction: filters.direction === "any" ? "any" : filters.direction,
+    airport: filters.airport === "any" ? "any" : filters.airport,
+    date: filters.date === "any" ? "any" : filters.date,
+  });
+  ctx.html(
+    layout({
+      title: "Browse rides",
+      user,
+      children: html`
         <section class="page-head">
           <div>
             <h1>Browse rides</h1>
@@ -159,9 +152,9 @@ get("/rides", async (ctx) => {
             <select name="airport">
               <option value="any" ${filters.airport === "any" ? "selected" : ""}>Any</option>
               ${event.airports.map(
-								(a) =>
-									html`<option value="${a.code}" ${filters.airport === a.code ? "selected" : ""}>${a.code}</option>`,
-							)}
+                (a) =>
+                  html`<option value="${a.code}" ${filters.airport === a.code ? "selected" : ""}>${a.code}</option>`,
+              )}
               <option value="OTHER" ${filters.airport === "OTHER" ? "selected" : ""}>Other</option>
             </select>
           </label>
@@ -174,86 +167,81 @@ get("/rides", async (ctx) => {
         </form>
 
         ${
-					rides.length === 0
-						? html`<section class="empty">
+          rides.length === 0
+            ? html`<section class="empty">
                 <p>No rides match those filters.</p>
                 <p><a class="button button-primary" href="/rides/new">Post the first one</a></p>
               </section>`
-						: html`<div class="ride-grid">${rides.map((r) => rideCard(r))}</div>`
-				}
+            : html`<div class="ride-grid">${rides.map((r) => rideCard(r))}</div>`
+        }
       `,
-		}),
-	);
+    }),
+  );
 });
 
 // ── Post a ride ──────────────────────────────────────────────────────────────
 get("/rides/new", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	ctx.html(layout({ title: "Post a ride", user, children: postForm({}) }));
+  const user = requireUser(ctx);
+  if (!user) return;
+  ctx.html(layout({ title: "Post a ride", user, children: postForm({}) }));
 });
 
 post("/rides/new", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	const body = await ctx.formBody();
-	const event = getEventConfig();
-	const airportCodes = [...event.airports.map((a) => a.code), "OTHER"];
+  const user = requireUser(ctx);
+  if (!user) return;
+  const body = await ctx.formBody();
+  const event = getEventConfig();
+  const airportCodes = [...event.airports.map((a) => a.code), "OTHER"];
 
-	const kind = oneOf(body.kind, "kind", ["offer", "request"]);
-	const direction = oneOf(body.direction, "direction", [
-		"to_venue",
-		"from_venue",
-	]);
-	const airport = oneOf(body.airport, "airport", airportCodes);
-	const otherPlace =
-		airport === "OTHER"
-			? reqString(body.other_place, "other_place", { max: 100 })
-			: null;
-	const departDate = isoDate(body.depart_date, "depart_date");
-	const departTime = hhmm(body.depart_time, "depart_time");
-	const flexMinutes = reqInt(body.flex_minutes ?? "0", "flex_minutes", {
-		min: 0,
-		max: 720,
-	});
-	const seats = reqInt(body.seats ?? "1", "seats", { min: 1, max: 8 });
-	const notes = optString(body.notes, "notes", { max: 500 });
+  const kind = oneOf(body.kind, "kind", ["offer", "request"]);
+  const direction = oneOf(body.direction, "direction", ["to_venue", "from_venue"]);
+  const airport = oneOf(body.airport, "airport", airportCodes);
+  const otherPlace =
+    airport === "OTHER" ? reqString(body.other_place, "other_place", { max: 100 }) : null;
+  const departDate = isoDate(body.depart_date, "depart_date");
+  const departTime = hhmm(body.depart_time, "depart_time");
+  const flexMinutes = reqInt(body.flex_minutes ?? "0", "flex_minutes", {
+    min: 0,
+    max: 720,
+  });
+  const seats = reqInt(body.seats ?? "1", "seats", { min: 1, max: 8 });
+  const notes = optString(body.notes, "notes", { max: 500 });
 
-	const meetupIdRaw = (body.meetup_id ?? "").trim();
-	const meetupId = meetupIdRaw === "" ? null : parseInt(meetupIdRaw, 10);
-	let pickupLat = null,
-		pickupLng = null;
-	const latRaw = (body.pickup_lat ?? "").trim();
-	const lngRaw = (body.pickup_lng ?? "").trim();
-	if (latRaw !== "" || lngRaw !== "") {
-		pickupLat = parseFloat(latRaw);
-		pickupLng = parseFloat(lngRaw);
-		if (!Number.isFinite(pickupLat) || pickupLat < -90 || pickupLat > 90) {
-			ctx.error("Pickup latitude must be a number between -90 and 90.", 400);
-			return;
-		}
-		if (!Number.isFinite(pickupLng) || pickupLng < -180 || pickupLng > 180) {
-			ctx.error("Pickup longitude must be a number between -180 and 180.", 400);
-			return;
-		}
-	}
+  const meetupIdRaw = (body.meetup_id ?? "").trim();
+  const meetupId = meetupIdRaw === "" ? null : parseInt(meetupIdRaw, 10);
+  let pickupLat = null,
+    pickupLng = null;
+  const latRaw = (body.pickup_lat ?? "").trim();
+  const lngRaw = (body.pickup_lng ?? "").trim();
+  if (latRaw !== "" || lngRaw !== "") {
+    pickupLat = parseFloat(latRaw);
+    pickupLng = parseFloat(lngRaw);
+    if (!Number.isFinite(pickupLat) || pickupLat < -90 || pickupLat > 90) {
+      ctx.error("Pickup latitude must be a number between -90 and 90.", 400);
+      return;
+    }
+    if (!Number.isFinite(pickupLng) || pickupLng < -180 || pickupLng > 180) {
+      ctx.error("Pickup longitude must be a number between -180 and 180.", 400);
+      return;
+    }
+  }
 
-	const id = createRide({
-		userId: user.id,
-		kind,
-		direction,
-		airport,
-		otherPlace,
-		departDate,
-		departTime,
-		flexMinutes,
-		seats,
-		notes,
-		meetupId,
-		pickupLat,
-		pickupLng,
-	});
-	ctx.redirect(`/rides/${id}`);
+  const id = createRide({
+    userId: user.id,
+    kind,
+    direction,
+    airport,
+    otherPlace,
+    departDate,
+    departTime,
+    flexMinutes,
+    seats,
+    notes,
+    meetupId,
+    pickupLat,
+    pickupLng,
+  });
+  ctx.redirect(`/rides/${id}`);
 });
 
 /**
@@ -264,8 +252,8 @@ post("/rides/new", async (ctx) => {
  *   meetup_id?: string|number } }} args
  */
 function postForm({ values = {} }) {
-	const event = getEventConfig();
-	return html`
+  const event = getEventConfig();
+  return html`
     <section class="page-head"><h1>Post a ride</h1></section>
     <form method="post" action="/rides/new" class="card stacked form-grid">
       <fieldset class="radio-pair">
@@ -323,18 +311,16 @@ function postForm({ values = {} }) {
 
       <fieldset class="full"><legend>Pickup location on map <span class="muted">(optional)</span></legend>
         ${
-					listMeetups().length > 0
-						? html`
+          listMeetups().length > 0
+            ? html`
               <label><span>Use a defined meetup</span>
                 <select name="meetup_id">
                   <option value="">— None —</option>
-                  ${listMeetups().map(
-										(m) => html`<option value="${m.id}">${m.name}</option>`,
-									)}
+                  ${listMeetups().map((m) => html`<option value="${m.id}">${m.name}</option>`)}
                 </select>
               </label>`
-						: ""
-				}
+            : ""
+        }
         <div class="form-grid">
           <label><span>Custom latitude <span class="muted">(optional)</span></span>
             <input type="text" name="pickup_lat" inputmode="decimal" placeholder="37.4143">
@@ -361,15 +347,15 @@ function postForm({ values = {} }) {
 
 // ── My rides ─────────────────────────────────────────────────────────────────
 get("/rides/mine", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	const posted = ridesPostedBy(user.id);
-	const claimed = claimsByUser(user.id);
-	ctx.html(
-		layout({
-			title: "My rides",
-			user,
-			children: html`
+  const user = requireUser(ctx);
+  if (!user) return;
+  const posted = ridesPostedBy(user.id);
+  const claimed = claimsByUser(user.id);
+  ctx.html(
+    layout({
+      title: "My rides",
+      user,
+      children: html`
         <section class="page-head">
           <h1>My rides</h1>
           <a class="link" href="/me">Edit profile & contact</a>
@@ -377,48 +363,48 @@ get("/rides/mine", async (ctx) => {
 
         <h2>Posted by you</h2>
         ${
-					posted.length === 0
-						? html`<p class="muted">You haven't posted anything yet. <a href="/rides/new">Post a ride</a>.</p>`
-						: html`<div class="ride-grid">${posted.map(
-								(r) =>
-									html`${rideCard(r)}
+          posted.length === 0
+            ? html`<p class="muted">You haven't posted anything yet. <a href="/rides/new">Post a ride</a>.</p>`
+            : html`<div class="ride-grid">${posted.map(
+                (r) =>
+                  html`${rideCard(r)}
                 <div class="ride-card-claims">
                   ${claimsForRide(r.id).map(
-										(c) => html`
+                    (c) => html`
                       <div class="claim-row claim-${c.status}">
                         <strong>${c.claimer_name || maskEmail(c.claimer_email)}</strong>
                         wants ${c.seats} seat${c.seats === 1 ? "" : "s"} —
                         <em>${c.status}</em>
                         ${c.message ? html`<p class="muted small">"${c.message}"</p>` : ""}
                         ${
-													c.status === "accepted"
-														? html`<p class="muted small">Contact: ${c.claimer_contact || c.claimer_email}</p>`
-														: ""
-												}
+                          c.status === "accepted"
+                            ? html`<p class="muted small">Contact: ${c.claimer_contact || c.claimer_email}</p>`
+                            : ""
+                        }
                         ${
-													c.status === "pending"
-														? html`
+                          c.status === "pending"
+                            ? html`
                             <form method="post" action="/claims/${c.id}/accept" class="inline">
                               <button class="button button-small button-primary">Accept</button>
                             </form>
                             <form method="post" action="/claims/${c.id}/decline" class="inline">
                               <button class="button button-small">Decline</button>
                             </form>`
-														: ""
-												}
+                            : ""
+                        }
                       </div>
                     `,
-									)}
+                  )}
                 </div>`,
-							)}</div>`
-				}
+              )}</div>`
+        }
 
         <h2>Your claims</h2>
         ${
-					claimed.length === 0
-						? html`<p class="muted">You haven't claimed any rides. <a href="/rides">Browse</a>.</p>`
-						: html`<div class="ride-grid">${claimed.map(
-								(c) => html`
+          claimed.length === 0
+            ? html`<p class="muted">You haven't claimed any rides. <a href="/rides">Browse</a>.</p>`
+            : html`<div class="ride-grid">${claimed.map(
+                (c) => html`
                   <article class="ride-card">
                     <header class="ride-card-head">
                       <span class="badge badge-${c.kind}">${kindLabel(c.kind)}</span>
@@ -431,107 +417,103 @@ get("/rides/mine", async (ctx) => {
                       <div><dt>Poster</dt><dd>${c.poster_name || maskEmail(c.poster_email)}</dd></div>
                     </dl>
                     ${
-											c.status === "accepted"
-												? html`<p class="contact-revealed">
+                      c.status === "accepted"
+                        ? html`<p class="contact-revealed">
                             <strong>Contact:</strong> ${c.poster_contact || c.poster_email}
                           </p>`
-												: c.status === "pending"
-													? html`<form method="post" action="/claims/${c.id}/withdraw" class="inline">
+                        : c.status === "pending"
+                          ? html`<form method="post" action="/claims/${c.id}/withdraw" class="inline">
                               <button class="button button-small">Withdraw</button>
                             </form>`
-													: ""
-										}
+                          : ""
+                    }
                     <a class="button" href="/rides/${c.ride_id}">Open ride</a>
                   </article>
                 `,
-							)}</div>`
-				}
+              )}</div>`
+        }
       `,
-		}),
-	);
+    }),
+  );
 });
 
 /** Map of (ride_id, user_id) → bool: has this user already confirmed? */
 function hasConfirmed(rideId, userId) {
-	const r = db
-		.prepare(
-			`SELECT 1 FROM ride_confirmations WHERE ride_id = ? AND user_id = ? LIMIT 1`,
-		)
-		.get(rideId, userId);
-	return !!r;
+  const r = db
+    .prepare(`SELECT 1 FROM ride_confirmations WHERE ride_id = ? AND user_id = ? LIMIT 1`)
+    .get(rideId, userId);
+  return !!r;
 }
 
 // ── Ride detail + claim ──────────────────────────────────────────────────────
 get("/rides/:id", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	const ride = getRide(parseInt(ctx.params.id, 10));
-	if (!ride) {
-		ctx.error("That ride doesn't exist (or was cancelled).", 404);
-		return;
-	}
-	const isOwner = ride.user_id === user.id;
-	const claims = isOwner ? claimsForRide(ride.id) : [];
-	const myClaim = !isOwner
-		? /** @type {any} */ (
-				claimsByUser(user.id).find((c) => c.ride_id === ride.id)
-			)
-		: null;
-	ctx.html(
-		layout({
-			title: airportName(ride.airport),
-			user,
-			children: html`
+  const user = requireUser(ctx);
+  if (!user) return;
+  const ride = getRide(parseInt(ctx.params.id, 10));
+  if (!ride) {
+    ctx.error("That ride doesn't exist (or was cancelled).", 404);
+    return;
+  }
+  const isOwner = ride.user_id === user.id;
+  const claims = isOwner ? claimsForRide(ride.id) : [];
+  const myClaim = !isOwner
+    ? /** @type {any} */ (claimsByUser(user.id).find((c) => c.ride_id === ride.id))
+    : null;
+  ctx.html(
+    layout({
+      title: airportName(ride.airport),
+      user,
+      children: html`
         <section class="page-head">
           <a class="link" href="/rides">← Browse</a>
           ${
-						isOwner
-							? html`<form method="post" action="/rides/${ride.id}/cancel" class="inline">
+            isOwner
+              ? html`<form method="post" action="/rides/${ride.id}/cancel" class="inline">
                 <button class="button button-danger" onclick="return confirm('Cancel this ride?')">Cancel ride</button>
               </form>`
-							: ""
-					}
+              : ""
+          }
         </section>
 
         ${rideCard(ride, { showActions: false })}
 
         ${
-					isOwner
-						? html`
+          isOwner
+            ? html`
               <section class="card">
                 <h2>Claims (${claims.length})</h2>
                 ${
-									claims.length === 0
-										? html`<p class="muted">No one has claimed this yet.</p>`
-										: html`<ul class="claim-list">
+                  claims.length === 0
+                    ? html`<p class="muted">No one has claimed this yet.</p>`
+                    : html`<ul class="claim-list">
                         ${claims.map(
-													(c) => html`<li class="claim-row claim-${c.status}">
+                          (c) => html`<li class="claim-row claim-${c.status}">
                             <strong>${c.claimer_name || maskEmail(c.claimer_email)}</strong>
                             wants ${c.seats} seat${c.seats === 1 ? "" : "s"} —
                             <em>${c.status}</em>
                             ${c.message ? html`<p class="muted small">"${c.message}"</p>` : ""}
                             ${
-															c.status === "accepted"
-																? html`<p class="muted small">Contact: ${c.claimer_contact || c.claimer_email}</p>`
-																: ""
-														}
+                              c.status === "accepted"
+                                ? html`<p class="muted small">Contact: ${c.claimer_contact || c.claimer_email}</p>`
+                                : ""
+                            }
                             ${
-															c.status === "pending"
-																? html`
+                              c.status === "pending"
+                                ? html`
                                 <form method="post" action="/claims/${c.id}/accept" class="inline">
                                   <button class="button button-small button-primary">Accept</button>
                                 </form>
                                 <form method="post" action="/claims/${c.id}/decline" class="inline">
                                   <button class="button button-small">Decline</button>
                                 </form>`
-																: ""
-														}
+                                : ""
+                            }
                           </li>`,
-												)}
+                        )}
                       </ul>
                       ${
-												claims.some((c) => c.status === "accepted")
-													? html`<div class="confirm-block">
+                        claims.some((c) => c.status === "accepted")
+                          ? html`<div class="confirm-block">
                               <p class="muted small">
                                 After the ride happens, both sides confirm to mint
                                 portable trust credentials. <a href="/trust">Learn more</a>.
@@ -543,17 +525,17 @@ get("/rides/:id", async (ctx) => {
                               </button>
                               <span class="confirm-status" data-confirm-status></span>
                             </div>`
-													: ""
-											}`
-								}
+                          : ""
+                      }`
+                }
               </section>`
-						: myClaim
-							? html`
+            : myClaim
+              ? html`
                 <section class="card">
                   <h2>Your claim — <em>${myClaim.status}</em></h2>
                   ${
-										myClaim.status === "accepted"
-											? html`<p class="contact-revealed">
+                    myClaim.status === "accepted"
+                      ? html`<p class="contact-revealed">
                           <strong>Contact:</strong> ${myClaim.poster_contact || myClaim.poster_email}
                         </p>
                         <div class="confirm-block">
@@ -568,15 +550,15 @@ get("/rides/:id", async (ctx) => {
                           </button>
                           <span class="confirm-status" data-confirm-status></span>
                         </div>`
-											: myClaim.status === "pending"
-												? html`<p class="muted">Waiting for the poster to accept or decline.</p>
+                      : myClaim.status === "pending"
+                        ? html`<p class="muted">Waiting for the poster to accept or decline.</p>
                           <form method="post" action="/claims/${myClaim.id}/withdraw">
                             <button class="button">Withdraw claim</button>
                           </form>`
-												: html`<p class="muted">This claim is ${myClaim.status}.</p>`
-									}
+                        : html`<p class="muted">This claim is ${myClaim.status}.</p>`
+                  }
                 </section>`
-							: html`
+              : html`
                 <section class="card">
                   <h2>Claim this ride</h2>
                   <p class="muted">When the poster accepts, you'll see their contact info and they'll see yours.</p>
@@ -591,76 +573,76 @@ get("/rides/:id", async (ctx) => {
                     <button type="submit" class="button button-primary">Claim seat</button>
                   </form>
                 </section>`
-				}
+        }
       `,
-		}),
-	);
+    }),
+  );
 });
 
 post("/rides/:id/claim", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	const rideId = parseInt(ctx.params.id, 10);
-	const body = await ctx.formBody();
-	const seats = reqInt(body.seats ?? "1", "seats", { min: 1, max: 8 });
-	const message = optString(body.message, "message", { max: 300 });
-	try {
-		createClaim({ rideId, claimerId: user.id, seats, message });
-	} catch (err) {
-		if (/UNIQUE/.test(errorMessage(err))) {
-			// Already claimed — silently redirect to the ride.
-		} else {
-			ctx.error(errorMessage(err));
-			return;
-		}
-	}
-	ctx.redirect(`/rides/${rideId}`);
+  const user = requireUser(ctx);
+  if (!user) return;
+  const rideId = parseInt(ctx.params.id, 10);
+  const body = await ctx.formBody();
+  const seats = reqInt(body.seats ?? "1", "seats", { min: 1, max: 8 });
+  const message = optString(body.message, "message", { max: 300 });
+  try {
+    createClaim({ rideId, claimerId: user.id, seats, message });
+  } catch (err) {
+    if (/UNIQUE/.test(errorMessage(err))) {
+      // Already claimed — silently redirect to the ride.
+    } else {
+      ctx.error(errorMessage(err));
+      return;
+    }
+  }
+  ctx.redirect(`/rides/${rideId}`);
 });
 
 post("/rides/:id/cancel", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	updateRideStatus(parseInt(ctx.params.id, 10), user.id, "cancelled");
-	ctx.redirect("/rides/mine");
+  const user = requireUser(ctx);
+  if (!user) return;
+  updateRideStatus(parseInt(ctx.params.id, 10), user.id, "cancelled");
+  ctx.redirect("/rides/mine");
 });
 
 post("/rides/:id/full", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	updateRideStatus(parseInt(ctx.params.id, 10), user.id, "full");
-	ctx.redirect("/rides/mine");
+  const user = requireUser(ctx);
+  if (!user) return;
+  updateRideStatus(parseInt(ctx.params.id, 10), user.id, "full");
+  ctx.redirect("/rides/mine");
 });
 
 post("/claims/:id/accept", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	decideClaim(parseInt(ctx.params.id, 10), user.id, "accepted");
-	ctx.redirect("/rides/mine");
+  const user = requireUser(ctx);
+  if (!user) return;
+  decideClaim(parseInt(ctx.params.id, 10), user.id, "accepted");
+  ctx.redirect("/rides/mine");
 });
 
 post("/claims/:id/decline", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	decideClaim(parseInt(ctx.params.id, 10), user.id, "declined");
-	ctx.redirect("/rides/mine");
+  const user = requireUser(ctx);
+  if (!user) return;
+  decideClaim(parseInt(ctx.params.id, 10), user.id, "declined");
+  ctx.redirect("/rides/mine");
 });
 
 post("/claims/:id/withdraw", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	withdrawClaim(parseInt(ctx.params.id, 10), user.id);
-	ctx.redirect("/rides/mine");
+  const user = requireUser(ctx);
+  if (!user) return;
+  withdrawClaim(parseInt(ctx.params.id, 10), user.id);
+  ctx.redirect("/rides/mine");
 });
 
 // ── Profile ──────────────────────────────────────────────────────────────────
 get("/me", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	ctx.html(
-		layout({
-			title: "Your profile",
-			user,
-			children: html`
+  const user = requireUser(ctx);
+  if (!user) return;
+  ctx.html(
+    layout({
+      title: "Your profile",
+      user,
+      children: html`
         <section class="page-head"><h1>Your profile</h1></section>
         <form method="post" action="/me" class="card stacked">
           <p class="muted">
@@ -683,30 +665,30 @@ get("/me", async (ctx) => {
           </div>
         </form>
       `,
-		}),
-	);
+    }),
+  );
 });
 
 post("/me", async (ctx) => {
-	const user = requireUser(ctx);
-	if (!user) return;
-	const body = await ctx.formBody();
-	const displayName = optString(body.display_name, "display_name", { max: 80 });
-	const contactMethod = optString(body.contact_method, "contact_method", {
-		max: 200,
-	});
-	updateUserProfile(user.id, { displayName, contactMethod });
-	ctx.redirect("/rides/mine");
+  const user = requireUser(ctx);
+  if (!user) return;
+  const body = await ctx.formBody();
+  const displayName = optString(body.display_name, "display_name", { max: 80 });
+  const contactMethod = optString(body.contact_method, "contact_method", {
+    max: 200,
+  });
+  updateUserProfile(user.id, { displayName, contactMethod });
+  ctx.redirect("/rides/mine");
 });
 
 // ── About ────────────────────────────────────────────────────────────────────
 get("/about", async (ctx) => {
-	const event = getEventConfig();
-	ctx.html(
-		layout({
-			title: "About",
-			user: ctx.user,
-			children: html`
+  const event = getEventConfig();
+  ctx.html(
+    layout({
+      title: "About",
+      user: ctx.user,
+      children: html`
         <section class="prose">
           <h1>About this app</h1>
           <p>
@@ -724,6 +706,6 @@ get("/about", async (ctx) => {
           ${event.supportEmail ? html`<p>Questions? <a href="mailto:${event.supportEmail}">${event.supportEmail}</a></p>` : ""}
         </section>
       `,
-		}),
-	);
+    }),
+  );
 });
