@@ -62,7 +62,8 @@ const RULES = [
   {
     id: "no-jsdoc-any",
     // Match @type or @param annotations whose brace-block contains a bare `any`.
-    pattern: /@(?:type|param|returns?|property)\s*\{[^}]*\bany\b[^}]*\}/,
+    // A quoted 'any' is a string-literal member of a union, not the any type.
+    pattern: /@(?:type|param|returns?|property)\s*\{[^}]*(?<!['"])\bany\b(?!['"])[^}]*\}/,
     message: "Bare `any` in JSDoc type defeats checkJs — narrow the type",
   },
   {

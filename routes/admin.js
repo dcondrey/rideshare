@@ -579,14 +579,15 @@ get("/admin/insights.csv", async (ctx) => {
 get("/admin/audit", async (ctx) => {
   const user = requireAdmin(ctx);
   if (!user) return;
-  const rows = /** @type {any[]} */ (
-    db
-      .prepare(
-        `SELECT actor_email, action, detail, ip, created_at
+  const rows =
+    /** @type {{ actor_email: string | null, action: string, detail: string | null, ip: string | null, created_at: number }[]} */ (
+      db
+        .prepare(
+          `SELECT actor_email, action, detail, ip, created_at
            FROM audit_log ORDER BY created_at DESC LIMIT 200`,
-      )
-      .all()
-  );
+        )
+        .all()
+    );
   ctx.html(
     layout({
       title: "Audit log",

@@ -457,7 +457,7 @@ get("/rides/:id", async (ctx) => {
   const isOwner = ride.user_id === user.id;
   const claims = isOwner ? claimsForRide(ride.id) : [];
   const myClaim = !isOwner
-    ? /** @type {any} */ (claimsByUser(user.id).find((c) => c.ride_id === ride.id))
+    ? (claimsByUser(user.id).find((c) => c.ride_id === ride.id) ?? null)
     : null;
   ctx.html(
     layout({

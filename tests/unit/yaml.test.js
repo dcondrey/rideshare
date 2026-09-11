@@ -32,17 +32,19 @@ import { parseYaml } from "../../lib/yaml.js";
 
 describe("yaml — flat scalars at top level", () => {
   it("parses string, int, float, bool, null in a flat mapping", () => {
-    const out = parseYaml(
-      [
-        "name: DEFCON 33",
-        "year: 2026",
-        "ratio: 1.5",
-        "active: true",
-        "inactive: false",
-        "explicit_null: null",
-        "tilde_null: ~",
-        "empty:",
-      ].join("\n"),
+    const out = /** @type {any} */ (
+      parseYaml(
+        [
+          "name: DEFCON 33",
+          "year: 2026",
+          "ratio: 1.5",
+          "active: true",
+          "inactive: false",
+          "explicit_null: null",
+          "tilde_null: ~",
+          "empty:",
+        ].join("\n"),
+      )
     );
     assert.equal(out.name, "DEFCON 33");
     assert.equal(out.year, 2026);
@@ -57,52 +59,58 @@ describe("yaml — flat scalars at top level", () => {
 
 describe("yaml — quoted strings", () => {
   it("parses single-quoted strings as literal", () => {
-    const out = parseYaml(`note: 'hello world'`);
+    const out = /** @type {any} */ (parseYaml(`note: 'hello world'`));
     assert.equal(out.note, "hello world");
   });
 
   it("parses double-quoted strings", () => {
-    const out = parseYaml(`note: "hello world"`);
+    const out = /** @type {any} */ (parseYaml(`note: "hello world"`));
     assert.equal(out.note, "hello world");
   });
 
   it("preserves embedded escape sequences in double-quoted strings", () => {
-    const out = parseYaml(`note: "line1\\nline2\\t\\"quoted\\""`);
+    const out = /** @type {any} */ (parseYaml(`note: "line1\\nline2\\t\\"quoted\\""`));
     assert.equal(out.note, 'line1\nline2\t"quoted"');
   });
 
   it("preserves '#' inside a quoted string (not treated as a comment)", () => {
-    const out = parseYaml(`tag: "rideshare #defcon"`);
+    const out = /** @type {any} */ (parseYaml(`tag: "rideshare #defcon"`));
     assert.equal(out.tag, "rideshare #defcon");
   });
 
   it("preserves ': ' inside a quoted string", () => {
-    const out = parseYaml(`url: "https://example.com:9999/path"`);
+    const out = /** @type {any} */ (parseYaml(`url: "https://example.com:9999/path"`));
     assert.equal(out.url, "https://example.com:9999/path");
   });
 });
 
 describe("yaml — nested mappings", () => {
   it("parses two-level nested mapping", () => {
-    const out = parseYaml(["event:", "  name: DEFCON 33", "  year: 2026"].join("\n"));
+    const out = /** @type {any} */ (
+      parseYaml(["event:", "  name: DEFCON 33", "  year: 2026"].join("\n"))
+    );
     assert.deepEqual(out, { event: { name: "DEFCON 33", year: 2026 } });
   });
 
   it("parses deeply nested mappings (3+ levels)", () => {
-    const out = parseYaml(["a:", "  b:", "    c:", "      d: deep"].join("\n"));
+    const out = /** @type {any} */ (
+      parseYaml(["a:", "  b:", "    c:", "      d: deep"].join("\n"))
+    );
     assert.deepEqual(out, { a: { b: { c: { d: "deep" } } } });
   });
 });
 
 describe("yaml — sequences", () => {
   it("parses a sequence of scalar items", () => {
-    const out = parseYaml(["fruits:", "  - apple", "  - pear", "  - 1"].join("\n"));
+    const out = /** @type {any} */ (
+      parseYaml(["fruits:", "  - apple", "  - pear", "  - 1"].join("\n"))
+    );
     assert.deepEqual(out.fruits, ["apple", "pear", 1]);
   });
 
   it("parses a sequence of mapping items '- key: value'", () => {
-    const out = parseYaml(
-      ["rides:", "  - id: r1", "    seats: 3", "  - id: r2", "    seats: 4"].join("\n"),
+    const out = /** @type {any} */ (
+      parseYaml(["rides:", "  - id: r1", "    seats: 3", "  - id: r2", "    seats: 4"].join("\n"))
     );
     assert.deepEqual(out.rides, [
       { id: "r1", seats: 3 },
@@ -111,8 +119,12 @@ describe("yaml — sequences", () => {
   });
 
   it("parses sequences with multiple keys per mapping item", () => {
-    const out = parseYaml(
-      ["items:", "  - name: a", "    qty: 1", "    tag: x", "  - name: b", "    qty: 2"].join("\n"),
+    const out = /** @type {any} */ (
+      parseYaml(
+        ["items:", "  - name: a", "    qty: 1", "    tag: x", "  - name: b", "    qty: 2"].join(
+          "\n",
+        ),
+      )
     );
     assert.deepEqual(out.items, [
       { name: "a", qty: 1, tag: "x" },
@@ -123,24 +135,26 @@ describe("yaml — sequences", () => {
 
 describe("yaml — comments", () => {
   it("ignores full-line comments", () => {
-    const out = parseYaml(["# this is a comment", "name: foo", "# another comment"].join("\n"));
+    const out = /** @type {any} */ (
+      parseYaml(["# this is a comment", "name: foo", "# another comment"].join("\n"))
+    );
     assert.deepEqual(out, { name: "foo" });
   });
 
   it("ignores end-of-line comments after a value", () => {
-    const out = parseYaml("name: foo  # inline comment");
+    const out = /** @type {any} */ (parseYaml("name: foo  # inline comment"));
     assert.equal(out.name, "foo");
   });
 
   it("does NOT strip '#' that appears inside a quoted string", () => {
-    const out = parseYaml(`tag: "value #1"  # real comment`);
+    const out = /** @type {any} */ (parseYaml(`tag: "value #1"  # real comment`));
     assert.equal(out.tag, "value #1");
   });
 });
 
 describe("yaml — file-level concerns", () => {
   it("strips a leading UTF-8 BOM (\\uFEFF)", () => {
-    const out = parseYaml("﻿name: bom-test\nyear: 2026");
+    const out = /** @type {any} */ (parseYaml("﻿name: bom-test\nyear: 2026"));
     assert.equal(out.name, "bom-test");
     assert.equal(out.year, 2026);
   });
@@ -177,7 +191,7 @@ describe("yaml — representative event.config.yaml-shaped input", () => {
       "  insights: false",
       "support_email: ops@example.com  # ops alias",
     ].join("\n");
-    const out = parseYaml(src);
+    const out = /** @type {any} */ (parseYaml(src));
     assert.equal(out.event.name, "DEFCON 33");
     assert.equal(out.event.year, 2026);
     assert.equal(out.venues.length, 2);

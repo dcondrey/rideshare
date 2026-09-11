@@ -199,7 +199,7 @@ post("/trust/bind/challenge", async (ctx) => {
 post("/trust/bind", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
-  const body = /** @type {any} */ (await ctx.jsonBody());
+  const body = /** @type {Record<string, unknown> | null} */ (await ctx.jsonBody());
   if (!body || typeof body !== "object") {
     ctx.json({ ok: false, error: "JSON body required" }, 400);
     return;
@@ -221,19 +221,22 @@ post("/trust/bind", async (ctx) => {
 post("/trust/import", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
-  const body = /** @type {any} */ (await ctx.jsonBody());
+  const body = /** @type {Record<string, unknown> | null} */ (await ctx.jsonBody());
   if (!body?.jwt) {
     ctx.json({ ok: false, error: "jwt required" }, 400);
     return;
   }
-  const r = await importCredential({ userId: user.id, jwt: body.jwt });
+  const r = await importCredential({
+    userId: user.id,
+    jwt: reqString(body.jwt, "jwt", { max: 8192 }),
+  });
   ctx.json(r, r.ok ? 200 : 400);
 });
 
 post("/trust/import-bundle", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
-  const body = /** @type {any} */ (await ctx.jsonBody());
+  const body = /** @type {Record<string, unknown> | unknown[] | null} */ (await ctx.jsonBody());
   /** @type {string[]} */
   let jwts = [];
   if (Array.isArray(body)) jwts = body.filter((x) => typeof x === "string");
@@ -289,7 +292,7 @@ get("/trust/credentials.json", async (ctx) => {
 get("/trust/credentials/:id", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
-  const row = /** @type {any} */ (
+  const row = /** @type {{ id: string, jwt: string } | undefined} */ (
     await import("../lib/db.js").then(({ db }) =>
       db
         .prepare(`SELECT id, jwt FROM credentials_issued WHERE id = ? AND subject_user_id = ?`)
@@ -366,8 +369,8 @@ post("/trust/verify", async (ctx) => {
   // Support both form post and JSON
   const ct = String(ctx.req.headers["content-type"] || "");
   if (ct.includes("application/json")) {
-    const b = /** @type {any} */ (await ctx.jsonBody());
-    jwt = b?.jwt;
+    const b = /** @type {Record<string, unknown> | null} */ (await ctx.jsonBody());
+    jwt = typeof b?.jwt === "string" ? b.jwt : "";
   } else {
     const f = await ctx.formBody();
     jwt = f.jwt;
