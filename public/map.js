@@ -198,7 +198,9 @@
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         const wrappedX = ((x % n) + n) % n; // wrap longitude
-        const key = `${z}/${wrappedX}/${y}`;
+        // IMPORTANT: key by the unwrapped world column; two world-copies share a
+        // wrappedX but need their own element to hold their own transform.
+        const key = `${z}/${x}/${y}`;
         keep[key] = true;
         let img = this._tilesByKey[key];
         if (!img) {
@@ -398,14 +400,7 @@
         const a = pointers[ids[0]];
         const b = pointers[ids[1]];
         const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        const midX = (a.x + b.x) / 2;
-        const midY = (a.y + b.y) / 2;
-        const rect = c.getBoundingClientRect();
-        pinchAnchor = {
-          dist: dist,
-          startZoom: self.zoom,
-          mid: { x: midX - rect.left, y: midY - rect.top },
-        };
+        pinchAnchor = { dist: dist, startZoom: self.zoom };
         panAnchor = null;
       }
     });
@@ -439,16 +434,12 @@
           self.maxZoom,
         );
         if (targetZoom !== self.zoom) {
-          self.zoom = targetZoom;
-          // Re-anchor on the midpoint of the pinch
           const rect = c.getBoundingClientRect();
-          const _midX = (a.x + b.x) / 2 - rect.left;
-          const _midY = (a.y + b.y) / 2 - rect.top;
-          self.zoomBy(0); // no-op
-          // Manual re-center: keep midpoint at same lat/lng
-          // (zoomBy was already called for the delta; we just snapshot)
-          self.render();
-          pinchAnchor.startZoom = targetZoom;
+          self.zoomBy(targetZoom - self.zoom, {
+            x: (a.x + b.x) / 2 - rect.left,
+            y: (a.y + b.y) / 2 - rect.top,
+          });
+          pinchAnchor.startZoom = self.zoom;
           pinchAnchor.dist = dist;
         }
       }
