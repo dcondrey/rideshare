@@ -308,3 +308,68 @@ describe("VC-JWT — time bounds (nbf / exp)", () => {
     assert.ok(after.errors.some((e) => e.startsWith("expired")));
   });
 });
+
+describe("VC-JWT — subject and id consistency between the JWT and the vc claim", () => {
+  it("rejects a validly signed credential whose sub disagrees with credentialSubject.id", async () => {
+    const id = freshIdentities();
+    const attacker = generateEd25519Keypair();
+    const attackerDid = pubKeyToDidKey(pubKeyRawBytes(attacker.publicKey));
+    // signCredential only defaults credentialSubject.id when absent, so passing
+    // one explicitly produces a genuine signature over disagreeing fields —
+    // the credential an attacker would actually present.
+    const jwt = signCredential({
+      issuerDid: id.issuerDid,
+      subjectDid: id.holderDid,
+      credentialId: "urn:uuid:subject-mismatch",
+      types: ["VerifiableCredential", "RideAttendanceCredential"],
+      credentialSubject: { id: attackerDid, event: "DEFCON 33", role: "rider" },
+      privateKey: id.issuerPriv,
+    });
+    const parts = decodeJwt(jwt);
+    assert.equal(parts.payload.sub, id.holderDid);
+    assert.equal(parts.payload.vc.credentialSubject.id, attackerDid);
+
+    const r = await verifyCredential(jwt);
+    assert.equal(r.ok, false, "a credential with two different subjects must not verify");
+    assert.ok(
+      r.errors.some((e) => e.startsWith("subject_mismatch:")),
+      `expected subject_mismatch, got ${JSON.stringify(r.errors)}`,
+    );
+  });
+
+  it("rejects a credential whose jti disagrees with vc.id", async () => {
+    const id = freshIdentities();
+    const jwt = signCredential({
+      issuerDid: id.issuerDid,
+      subjectDid: id.holderDid,
+      credentialId: "urn:uuid:jti-a",
+      types: ["VerifiableCredential"],
+      credentialSubject: { event: "DEFCON 33" },
+      privateKey: id.issuerPriv,
+    });
+    const [h, p, s] = jwt.split(".");
+    const payloadObj = JSON.parse(Buffer.from(p, "base64url").toString("utf8"));
+    payloadObj.vc.id = "urn:uuid:jti-b";
+    const tamperedP = Buffer.from(JSON.stringify(payloadObj)).toString("base64url");
+    const r = await verifyCredential(`${h}.${tamperedP}.${s}`);
+    assert.equal(r.ok, false);
+    assert.ok(
+      r.errors.some((e) => e.startsWith("vc.id_mismatch:")),
+      `expected vc.id_mismatch, got ${JSON.stringify(r.errors)}`,
+    );
+  });
+
+  it("still accepts a credential where both subject fields agree", async () => {
+    const id = freshIdentities();
+    const jwt = signCredential({
+      issuerDid: id.issuerDid,
+      subjectDid: id.holderDid,
+      credentialId: "urn:uuid:subject-agree",
+      types: ["VerifiableCredential"],
+      credentialSubject: { id: id.holderDid, event: "DEFCON 33" },
+      privateKey: id.issuerPriv,
+    });
+    const r = await verifyCredential(jwt);
+    assert.equal(r.ok, true, `errors: ${JSON.stringify(r.errors)}`);
+  });
+});

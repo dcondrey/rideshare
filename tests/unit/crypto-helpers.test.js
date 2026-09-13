@@ -60,6 +60,14 @@ describe("safeEqual", () => {
     assert.equal(safeEqual("", "x"), false);
   });
 
+  it("returns false for a multibyte string of equal JS length, without throwing", () => {
+    // "é" is one UTF-16 code unit but two UTF-8 bytes. Comparing String.length
+    // would pass the guard and hand timingSafeEqual buffers of 4 and 8 bytes,
+    // which throws RangeError instead of returning false.
+    assert.equal(safeEqual("éééé", "abcd"), false);
+    assert.equal(safeEqual("abcd", "éééé"), false);
+  });
+
   it("returns false for non-string inputs (defensive)", () => {
     // @ts-expect-error testing runtime guard
     assert.equal(safeEqual(null, "x"), false);
@@ -67,6 +75,16 @@ describe("safeEqual", () => {
     assert.equal(safeEqual("x", undefined), false);
     // @ts-expect-error testing runtime guard
     assert.equal(safeEqual(123, 123), false);
+  });
+});
+
+describe("verifyPayload", () => {
+  it("returns null for a multibyte signature of the same JS length", () => {
+    // The signature half of a token is attacker-controlled; reaching
+    // timingSafeEqual with a byte-length mismatch would be a 500, not a reject.
+    const token = signPayload({ sub: "a@b.test" });
+    const body = token.slice(0, token.lastIndexOf("."));
+    assert.equal(verifyPayload(`${body}.${"é".repeat(64)}`), null);
   });
 });
 

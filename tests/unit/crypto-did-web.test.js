@@ -20,7 +20,7 @@ import { setupTestEnv } from "../helpers/env.js";
 
 setupTestEnv();
 
-import { didWebFor, didWebToUrl } from "../../lib/did.js";
+import { didWebFor, didWebToUrl, resolveDid } from "../../lib/did.js";
 
 describe("didWebFor — DID construction from app URL", () => {
   it("https origin without port → did:web:<host>", () => {
@@ -88,4 +88,16 @@ describe("didWebFor ↔ didWebToUrl — round-trip consistency", () => {
       assert.equal(didWebToUrl(did), expectedDocUrl);
     });
   }
+});
+
+describe("did:web resolution refuses an attacker-chosen destination", () => {
+  it("refuses a port other than 443", async () => {
+    // did:web:host%3A8443 is how a caller picks the port, and the verifier's
+    // error text would otherwise report what it found there.
+    await assert.rejects(resolveDid("did:web:example.com%3A8443"), /port 443/);
+  });
+
+  it("refuses a host that resolves into private address space", async () => {
+    await assert.rejects(resolveDid("did:web:localhost"), /non-public|DNS lookup|must be HTTPS/);
+  });
 });

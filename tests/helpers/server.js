@@ -8,8 +8,10 @@
  *   ...
  *   await srv.close();
  *
- * Each call to startTestServer() returns a fresh server bound to a fresh
- * temporary database file.
+ * IMPORTANT: one server per test *process*. ESM has no cache-busting that
+ * reaches transitive imports, so `lib/db.js` is a singleton for the lifetime of
+ * the process and binds to whatever DATABASE_PATH was set when it was first
+ * imported. Give each test file its own server, not each test case.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -26,6 +28,7 @@ import { setupTestEnv } from "./env.js";
  *   fetch: (path: string, init?: RequestInit) => Promise<Response>,
  *   close: () => Promise<void>,
  *   tmpDir: string,
+ *   mod: (specifier: string) => Promise<any>,
  * }>}
  */
 export async function startTestServer(envOverrides = {}) {
@@ -33,28 +36,36 @@ export async function startTestServer(envOverrides = {}) {
   const dbPath = join(tmpDir, "test.db");
   setupTestEnv({
     DATABASE_PATH: dbPath,
+    DEPLOYMENT_KEY_PATH: join(tmpDir, "deployment.key"),
     APP_URL: "http://127.0.0.1:0",
     PORT: "0",
     NODE_ENV: "test",
     ...envOverrides,
   });
 
-  // Bust the module cache so each server gets a fresh module graph
-  // (necessary because lib/db.js singleton would otherwise be shared).
-  // We do this by importing with a query string.
-  const tag = `?test=${Math.random().toString(36).slice(2)}&t=${Date.now()}`;
-  const router = await import(`../../lib/router.js${tag}`);
+  // Every import here is untagged and so shares one module graph with the code
+  // under test. A `?tag` cache-bust would apply only to these entry modules —
+  // routes/*.js import "../lib/router.js" with no tag, so they would register
+  // their routes on a different router instance than the one dispatched below,
+  // and every request would 404.
+  const router = await import("../../lib/router.js");
   // Trigger registration of routes
-  await import(`../../routes/auth.js${tag}`);
-  await import(`../../routes/rides.js${tag}`);
-  await import(`../../routes/admin.js${tag}`);
-  await import(`../../routes/map.js${tag}`);
-  await import(`../../routes/trust.js${tag}`);
-  await import(`../../routes/well-known.js${tag}`);
-  await import(`../../routes/static.js${tag}`);
-  await import(`../../lib/config.js${tag}`); // ensures a fresh config module for this test's env
-  // Initialize signing key
-  await (await import(`../../lib/trust.js${tag}`)).getDeploymentKey();
+  await import("../../routes/auth.js");
+  await import("../../routes/rides.js");
+  await import("../../routes/admin.js");
+  await import("../../routes/map.js");
+  await import("../../routes/trust.js");
+  await import("../../routes/well-known.js");
+  await import("../../routes/static.js");
+  await import("../../lib/config.js");
+  await (await import("../../lib/trust.js")).getDeploymentKey();
+
+  /**
+   * Reach into the server's module graph — to seed the database, mint tokens,
+   * or assert on state the HTTP surface does not expose.
+   * @param {string} specifier repo-relative, e.g. "lib/db.js"
+   */
+  const mod = (specifier) => import(`../../${specifier}`);
 
   const server = createServer((req, res) => {
     router.dispatch(req, res, { trustProxy: false }).catch((err) => {
@@ -71,6 +82,7 @@ export async function startTestServer(envOverrides = {}) {
     port: addr.port,
     url,
     tmpDir,
+    mod,
     fetch: (path, init = {}) => fetch(url + path, { redirect: "manual", ...init }),
     close: async () => {
       await new Promise((resolve, reject) =>

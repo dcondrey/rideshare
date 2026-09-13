@@ -14,11 +14,13 @@
  *   - sequences (scalar items, "- key: value" items, mixed)
  *   - comments (full-line, end-of-line; '#' inside quoted strings is preserved)
  *   - empty values (`key:` → null)
+ *   - empty flow collections (`[]`, `{}`) and nothing else in flow style
  *   - BOM at start of file
  *
  * Errors:
  *   - tabs for indentation
  *   - ambiguous unquoted string containing ": "
+ *   - any non-empty flow collection
  */
 
 import assert from "node:assert/strict";
@@ -200,5 +202,26 @@ describe("yaml — representative event.config.yaml-shaped input", () => {
     assert.equal(out.features.rideshare, true);
     assert.equal(out.features.insights, false);
     assert.equal(out.support_email, "ops@example.com");
+  });
+});
+
+describe("flow collections", () => {
+  it("parses the empty forms as an empty array and an empty object", () => {
+    // `meetups: []` is how the shipped event.config.yaml says "none". Before
+    // this was supported the value was the string "[]", which an
+    // Array.isArray() guard downstream read as "not configured" — a mistake
+    // that looked exactly like the intended behaviour.
+    assert.deepEqual(parseYaml("meetups: []"), { meetups: [] });
+    assert.deepEqual(parseYaml("overrides: {}"), { overrides: {} });
+  });
+
+  it("rejects a non-empty flow collection instead of returning it as a string", () => {
+    for (const src of ["airports: [SFO, SJC]", "venue: {name: X}"]) {
+      assert.throws(() => parseYaml(src), /Flow style/, `${src} was not rejected`);
+    }
+  });
+
+  it("still treats bracket text inside a quoted string as a string", () => {
+    assert.deepEqual(parseYaml('tagline: "[not a list]"'), { tagline: "[not a list]" });
   });
 });
