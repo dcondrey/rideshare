@@ -2,6 +2,21 @@
 // Tiny progressive-enhancement script.
 // Loaded with `defer` and only hooks up things that benefit from JS.
 (() => {
+  // Hand the main thread back before doing work the user is not waiting on.
+  // Everything below runs inside an input handler, and INP measures the whole
+  // task, so a multi-megabyte string assignment in the same task as the click
+  // is what turns a fast interaction into a slow one. scheduler.postTask lets
+  // the browser paint the acknowledgement first; setTimeout is the fallback.
+  const defer =
+    typeof scheduler === "object" && scheduler && typeof scheduler.postTask === "function"
+      ? (fn) => scheduler.postTask(fn, { priority: "user-visible" })
+      : (fn) => setTimeout(fn, 0);
+
+  /** @param {Element | null} el @param {string} text */
+  const say = (el, text) => {
+    if (el) el.textContent = text;
+  };
+
   // 1. Reveal "other place" input when the airport selector is set to OTHER.
   const sel = document.getElementById("airport-select");
   const otherLabel = document.getElementById("other-place-label");
@@ -18,6 +33,7 @@
   const pick = document.getElementById("allowlist-pick");
   const file = document.getElementById("allowlist-file");
   const ta = document.getElementById("allowlist-csv");
+  const fileStatus = document.getElementById("allowlist-file-status");
   if (pick && file && ta) {
     pick.addEventListener("click", () => {
       file.click();
@@ -25,13 +41,23 @@
     file.addEventListener("change", () => {
       const f = file.files?.[0];
       if (!f) return;
+      // No alert(): a modal dialog blocks the main thread until dismissed, and
+      // the live region beside the control already reports this to everyone,
+      // screen-reader users included.
       if (f.size > 9 * 1024 * 1024) {
-        alert("That file is larger than 9MB. Try splitting it.");
+        say(fileStatus, `${f.name} is larger than 9MB. Try splitting it.`);
         return;
       }
+      say(fileStatus, `Reading ${f.name}…`);
       const reader = new FileReader();
       reader.onload = () => {
-        ta.value = String(reader.result || "");
+        const text = String(reader.result || "");
+        // Up to 9MB into a textarea. Deferred so the reader's task ends and the
+        // "Reading…" acknowledgement paints before the long write starts.
+        defer(() => {
+          ta.value = text;
+          say(fileStatus, `Loaded ${f.name} (${Math.round(f.size / 1024)}KB) into the CSV field.`);
+        });
       };
       reader.readAsText(f);
     });
@@ -76,6 +102,7 @@
   const lpreviewImg = document.getElementById("logo-preview-img");
   const lsize = document.getElementById("logo-size");
   const lsubmit = document.getElementById("logo-submit");
+  const lstatus = document.getElementById("logo-status");
   if (lpick && lfile && lhidden) {
     lpick.addEventListener("click", () => {
       lfile.click();
@@ -85,24 +112,25 @@
       if (!f) return;
       const maxBytes = 200 * 1024;
       if (f.size > maxBytes) {
-        alert(
-          "Image is " +
-            Math.round(f.size / 1024) +
-            "KB; max is " +
-            Math.round(maxBytes / 1024) +
-            "KB.",
+        say(
+          lstatus,
+          `${f.name} is ${Math.round(f.size / 1024)}KB — over the ${Math.round(maxBytes / 1024)}KB limit.`,
         );
         lfile.value = "";
         return;
       }
+      say(lstatus, `Reading ${f.name}…`);
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = String(reader.result || "");
-        lhidden.value = dataUrl;
-        if (lpreviewImg) lpreviewImg.src = dataUrl;
-        if (lpreview) lpreview.removeAttribute("hidden");
-        if (lsize) lsize.textContent = ` (${Math.round(f.size / 1024)}KB)`;
-        if (lsubmit) lsubmit.disabled = false;
+        defer(() => {
+          lhidden.value = dataUrl;
+          if (lpreviewImg) lpreviewImg.src = dataUrl;
+          if (lpreview) lpreview.removeAttribute("hidden");
+          if (lsize) lsize.textContent = ` (${Math.round(f.size / 1024)}KB)`;
+          say(lstatus, `${f.name} ready to upload.`);
+          if (lsubmit) lsubmit.disabled = false;
+        });
       };
       reader.readAsDataURL(f);
     });
