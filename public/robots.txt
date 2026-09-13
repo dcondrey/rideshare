@@ -1,2 +1,47 @@
+# Default-deny, with the two public pages allowed back in.
+#
+# Only / and /about render anything for a signed-out visitor. Everything else
+# is behind the attendee allowlist and answers a crawler with a redirect to /,
+# so there is nothing to index and every fetch costs a database round trip.
+#
+# Keeping the blanket Disallow and carving out exceptions — rather than listing
+# each private path — means a route added later is private to crawlers by
+# default, which matches how the app itself treats a new route. Google and Bing
+# resolve a conflict by longest match, so the Allow lines below win for the
+# paths they name and nothing else.
+
 User-agent: *
 Disallow: /
+
+# The landing page, exactly. The `$` anchor matters: without it this would also
+# release every URL on the site. With it, `/?utm_source=...` stays disallowed,
+# which is also what keeps the browse filters out — see below.
+Allow: /$
+
+# The public description of the app. No query string is meaningful here.
+Allow: /about
+
+# Public DID document, served for did:web resolution. Not a page, but it is
+# meant to be fetchable by anyone.
+Allow: /.well-known/
+
+# The stylesheet lib/html.js puts in every layout, including the two pages
+# above. Blocked by the default deny, a crawler renders them unstyled.
+Allow: /styles.css
+Allow: /brand.css
+
+# Deliberately NOT allowed, and worth naming because they are the paths a
+# crawler would otherwise find and grind on:
+#
+#   /rides?kind=&direction=&airport=&date=
+#       The browse filters are a query-string product: four dimensions, every
+#       combination a distinct URL rendering the same small ride set. This is
+#       the crawl trap this project has in place of an internal search page or
+#       an infinite-scroll feed. `Disallow: /` covers it, and covers any filter
+#       added later without this file needing to know about it.
+#
+#   /admin, /admin/insights.csv
+#       Organizer dashboard and its aggregate export.
+#
+#   /rides/:id, /rides/mine, /me, /trust, /map
+#       Attendee data. Session-gated, and personal.
