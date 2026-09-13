@@ -5,7 +5,7 @@
 #
 # Image size: ~70MB on top of node:22-alpine.
 
-FROM node:22-alpine
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 # 22-alpine, resolved 2026-09-12
 
 WORKDIR /app
 
@@ -17,7 +17,8 @@ VOLUME ["/data"]
 
 ENV NODE_ENV=production \
     PORT=3000 \
-    DATABASE_PATH=/data/app.db
+    DATABASE_PATH=/data/app.db \
+    DEPLOYMENT_KEY_PATH=/data/secrets/deployment.key
 
 EXPOSE 3000
 
@@ -26,6 +27,6 @@ RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
 USER app
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -q -O - http://127.0.0.1:3000/about >/dev/null 2>&1 || exit 1
+  CMD wget -q -O - http://127.0.0.1:3000/health >/dev/null 2>&1 || exit 1
 
 CMD ["node", "--no-warnings=ExperimentalWarning", "server.js"]

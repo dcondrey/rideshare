@@ -123,6 +123,23 @@ jobs:
       - name: Scan for banned patterns (debugger/console.log/TODO-without-issue/etc.)
         run: node scripts/check-no-banned-patterns.mjs
 
+  doc-paths:
+    name: doc-paths
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Assert the security docs only name files that exist
+        # A documented control that names a module which never existed reads as
+        # a shipped control to anyone reviewing this repo.
+        run: node scripts/check-doc-paths.mjs
+
   zero-runtime-deps:
     name: zero-runtime-deps
     runs-on: ubuntu-latest
@@ -152,9 +169,8 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Boot the server in the background and curl /health (fall back to /)
+      - name: Boot the server in the background and curl /health
         # We boot whichever entry script exists, wait up to 20s for the port to open, then probe.
-        # /health is preferred; if 404, we accept a 200 from /. Anything else fails the job.
         env:
           PORT: '8080'
           NODE_ENV: 'test'
@@ -191,21 +207,13 @@ jobs:
             sleep 0.5
           done
 
-          # Try /health first; if it 404s, fall back to /.
           STATUS_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/health" || echo "000")
           echo "GET /health -> $STATUS_HEALTH"
           if [ "$STATUS_HEALTH" = "200" ]; then
-            echo "Smoke check passed via /health."
+            echo "Smoke check passed."
             exit 0
           fi
 
-          STATUS_ROOT=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/" || echo "000")
-          echo "GET / -> $STATUS_ROOT"
-          if [ "$STATUS_ROOT" = "200" ]; then
-            echo "Smoke check passed via /."
-            exit 0
-          fi
-
-          echo "::error::Server did not return 200 from /health or /. Server log follows:"
+          echo "::error::Server did not return 200 from /health. Server log follows:"
           sed -n '1,200p' server.log || true
           exit 1

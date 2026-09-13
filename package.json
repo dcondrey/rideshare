@@ -7,7 +7,10 @@
   "license": "MIT",
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning server.js",
-    "dev": "node --no-warnings=ExperimentalWarning --watch server.js"
+    "dev": "node --no-warnings=ExperimentalWarning --watch server.js",
+    "test": "node --test",
+    "backup": "node scripts/backup.mjs",
+    "allowlist:import": "node scripts/import-allowlist.mjs"
   },
   "engines": {
     "node": ">=22.5.0"

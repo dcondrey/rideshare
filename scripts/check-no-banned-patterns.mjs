@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // @ts-check
+// SPDX-License-Identifier: MIT
 //
 // check-no-banned-patterns.mjs
 // ----------------------------
-// Scan lib/, routes/, and server.js for banned source patterns. Each match exits 1
+// Scan lib/, routes/, scripts/, and server.js for banned source patterns. Each match exits 1
 // unless waived by an inline `// allow-banned: <reason>` comment on the SAME line.
 //
 // Patterns:
@@ -35,11 +36,25 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 
-const SCAN_DIRS = ["lib", "routes"];
+const SCAN_DIRS = ["lib", "routes", "scripts"];
 const SCAN_FILES = ["server.js"];
 
 // Files exempt from process.env rule.
 const ENV_ALLOWED_FILES = new Set([join(ROOT, "lib", "config.js")]);
+
+const SCRIPTS_DIR = join(ROOT, "scripts");
+
+/**
+ * Two rules describe the *server runtime*, not the language: an operator
+ * running a CLI script reads its output on a terminal, and there is no request
+ * log to put it in, so console.log is the interface. Same for process.env —
+ * lib/config.js exists so the server has one place to read configuration, and
+ * routing a `--force` flag or `$USER` through it would be worse, not safer.
+ * @param {string} file
+ */
+function isCliScript(file) {
+  return file.startsWith(`${SCRIPTS_DIR}/`);
+}
 
 const WAIVER_RE = /\/\/\s*allow-banned\b/;
 
@@ -58,6 +73,7 @@ const RULES = [
     id: "no-console-log",
     pattern: /\bconsole\.log\s*\(/,
     message: "console.log is banned — use console.warn/error or structured logging",
+    skipFile: isCliScript,
   },
   {
     id: "no-jsdoc-any",
@@ -80,7 +96,7 @@ const RULES = [
     id: "centralize-env",
     pattern: /\bprocess\.env\.[A-Z0-9_]+/,
     message: "process.env access must be centralized in lib/config.js",
-    skipFile: (file) => ENV_ALLOWED_FILES.has(file),
+    skipFile: (file) => ENV_ALLOWED_FILES.has(file) || isCliScript(file),
   },
   {
     id: "no-unsafe-inline-csp",
@@ -219,19 +235,16 @@ function stripLineCommentsOnly(src) {
 async function walk(dir) {
   /** @type {string[]} */
   const out = [];
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch (err) {
-    if (/** @type {NodeJS.ErrnoException} */ (err).code === "ENOENT") return out;
-    throw err;
-  }
+  // IMPORTANT: a missing scan root is a gate failure, not an empty list.
+  // Swallowing ENOENT here meant renaming a scanned directory made this exit 0
+  // having read nothing, and CI green is read as coverage.
+  const entries = await readdir(dir, { withFileTypes: true });
   for (const e of entries) {
     const p = join(dir, e.name);
     if (e.isDirectory()) {
       if (e.name === "node_modules") continue;
       out.push(...(await walk(p)));
-    } else if (e.isFile() && e.name.endsWith(".js")) {
+    } else if (e.isFile() && (e.name.endsWith(".js") || e.name.endsWith(".mjs"))) {
       out.push(p);
     }
   }
@@ -250,15 +263,17 @@ async function walk(dir) {
 async function main() {
   /** @type {string[]} */
   const files = [];
-  for (const d of SCAN_DIRS) files.push(...(await walk(join(ROOT, d))));
+  // This file states every banned pattern as a literal, so scanning it reports
+  // the rule table as violations of itself.
+  const SELF = fileURLToPath(import.meta.url);
+  for (const d of SCAN_DIRS) {
+    files.push(...(await walk(join(ROOT, d))).filter((f) => f !== SELF));
+  }
   for (const f of SCAN_FILES) {
     const p = join(ROOT, f);
-    try {
-      const s = await stat(p);
-      if (s.isFile()) files.push(p);
-    } catch {
-      /* skip */
-    }
+    const s = await stat(p);
+    if (!s.isFile()) throw new Error(`scan target is not a file: ${f}`);
+    files.push(p);
   }
 
   /** @type {Finding[]} */

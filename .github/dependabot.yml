@@ -1,9 +1,10 @@
 # Dependabot configuration.
 #
-# Two ecosystems matter here:
+# Three ecosystems matter here:
 #   1. github-actions — keep CI action versions current (security patches in actions/checkout etc.)
 #   2. npm           — we have ZERO runtime deps today, but devDeps (Biome, TypeScript) will appear.
 #                      Group them so we get one PR per week instead of one per package.
+#   3. docker         — the Dockerfile base image is digest-pinned, so nothing else bumps it.
 #
 # Cadence is weekly + Monday morning UTC so PRs land before the team starts triage.
 version: 2
@@ -76,3 +77,21 @@ updates:
           - 'typescript'
           - '@types/*'
           - 'ts-*'
+
+  # 3. docker — the Dockerfile base image is pinned to a digest, which does not
+  #    float with security patches the way the 22-alpine tag did. Nothing else
+  #    moves it, so Dependabot has to.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: deps
+      include: scope

@@ -17,8 +17,10 @@ primary_region = "iad"
   dockerfile = "Dockerfile"
 
 [env]
+  NODE_ENV = "production"
   PORT = "3000"
   DATABASE_PATH = "/data/app.db"
+  DEPLOYMENT_KEY_PATH = "/data/secrets/deployment.key"
 
 [[mounts]]
   source = "data"

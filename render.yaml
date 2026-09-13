@@ -14,8 +14,12 @@ services:
       mountPath: /data
       sizeGB: 1
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: DATABASE_PATH
         value: /data/app.db
+      - key: DEPLOYMENT_KEY_PATH
+        value: /data/secrets/deployment.key
       - key: APP_URL
         sync: false
       - key: SESSION_SECRET

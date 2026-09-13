@@ -15,7 +15,9 @@ services:
       - "${PORT:-3000}:3000"
     env_file: .env
     environment:
+      NODE_ENV: production
       DATABASE_PATH: /data/app.db
+      DEPLOYMENT_KEY_PATH: /data/secrets/deployment.key
     volumes:
       - rideshare-data:/data
 
