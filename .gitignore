@@ -28,6 +28,24 @@ data/
 /attendees*
 /allowlist*
 
+# Live event config. The tracked file is event.config.example.yaml; copy it to
+# event.config.yaml and edit that. Keeping the real one untracked means
+# configuring an event does not leave a permanently dirty working tree, and an
+# upgrade cannot conflict on it. The loader falls back to the example (with a
+# warning) so a fresh checkout still boots.
+/event.config.yaml
+/event.config.yml
+/event.config.json
+
+# Attendee allowlist seed — plaintext addresses, read once at first boot.
+# (Also covered by /allowlist* below; named here so its purpose is obvious.)
+/allowlist.csv
+
+# Deployment signing key. NEVER commit: it signs every credential this
+# deployment issues, and the matching public key is published at
+# /.well-known/did.json, so a leak lets anyone forge verifiable credentials.
+secrets/
+
 # Environment
 .env
 .env.local
