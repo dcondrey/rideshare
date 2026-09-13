@@ -7,7 +7,7 @@
  */
 
 import { getEventConfig } from "../lib/event-config.js";
-import { html, layout, raw } from "../lib/html.js";
+import { html, jsonScriptSafe, layout, raw } from "../lib/html.js";
 import { listStyles, resolveStyle } from "../lib/map-styles.js";
 import { listMeetups } from "../lib/meetups.js";
 import { browseRides } from "../lib/rides.js";
@@ -148,7 +148,7 @@ get("/map", async (ctx) => {
           </form>
         </section>
 
-        <div id="map" class="map-canvas" aria-label="Map of rides and meetups"></div>
+        <div id="map" class="map-canvas" role="region" aria-label="Map of rides and meetups"></div>
 
         <p class="map-attribution-note muted small">
           Map by ${raw(style.attribution)}.
@@ -171,22 +171,3 @@ get("/map", async (ctx) => {
     }),
   );
 });
-
-// Regex literals can't contain raw U+2028 / U+2029 (they terminate JS source
-// lines), so we build the patterns from explicit escape sequences.
-const LS = /\u2028/g;
-const PS = /\u2029/g;
-
-/**
- * JSON-encode for safe insertion into a <script type="application/json"> tag.
- * Replaces `<`, `>`, `&` to prevent script-tag-breaking attacks, plus the JSON
- * Line/Paragraph Separator chars (which break in JS string literals).
- */
-function jsonScriptSafe(obj) {
-  return JSON.stringify(obj)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(LS, "\\u2028")
-    .replace(PS, "\\u2029");
-}

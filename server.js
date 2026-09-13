@@ -11,6 +11,7 @@
 import { createServer } from "node:http";
 
 import { config } from "./lib/config.js";
+import { db } from "./lib/db.js";
 import { dispatch } from "./lib/router.js";
 
 // Importing each routes/* file registers its handlers via the router.
@@ -22,18 +23,43 @@ import "./routes/admin.js";
 import "./routes/map.js";
 import "./routes/trust.js";
 import "./routes/well-known.js";
+import "./routes/health.js";
 import "./routes/static.js";
 
+// Seed the attendee allowlist from ./allowlist.csv (only if table is empty).
+import { seedAllowlistIfEmpty } from "./lib/allowlist.js";
 // Seed event-defined meetups from event.config.yaml (only if table is empty).
 import { seedMeetupsIfEmpty } from "./lib/meetups.js";
 
 seedMeetupsIfEmpty();
+seedAllowlistIfEmpty();
 
-import { info } from "./lib/log.js";
+import { info, error as logError } from "./lib/log.js";
 // Initialize the deployment's signing key (one-time, then cached).
-import { getDeploymentKey } from "./lib/trust.js";
+import { getDeploymentKey, revalidateImportedCredentials } from "./lib/trust.js";
 
 getDeploymentKey();
+
+// Imported credentials are counted forever once verified, so a background
+// sweep re-checks the stalest few. Deliberately not on the /trust render path:
+// a GET must not fire outbound did:web fetches, which is the same reason
+// /trust/credentials.json is excluded from speculative prefetch.
+const CREDENTIAL_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
+function sweepCredentials() {
+  revalidateImportedCredentials({ limit: 20 })
+    .then(({ checked, invalidated }) => {
+      if (checked > 0) {
+        info(`[trust] re-verified ${checked} imported credentials, ${invalidated} now invalid`);
+      }
+    })
+    .catch((err) => {
+      logError("imported-credential sweep failed", {
+        component: "trust",
+        err: err instanceof Error ? err.message : String(err),
+      });
+    });
+}
+setInterval(sweepCredentials, CREDENTIAL_SWEEP_INTERVAL_MS).unref();
 
 const server = createServer((req, res) => {
   dispatch(req, res, { trustProxy: config.trustProxy }).catch((err) => {
@@ -75,11 +101,42 @@ server.listen(config.port, () => {
 function shutdown(signal) {
   info(`\n[server] received ${signal}, shutting down...`);
   server.close(() => {
+    closeDatabase();
     info("[server] closed");
     process.exit(0);
   });
-  // Force-exit after 10s in case a hung connection blocks close.
-  setTimeout(() => process.exit(0), 10000).unref();
+  // Force-exit after 10s in case a hung connection blocks close. The database
+  // still gets its close: in WAL mode that is what checkpoints the -wal file
+  // back into the database, and skipping it leaves a snapshot to recover from.
+  setTimeout(() => {
+    closeDatabase();
+    process.exit(0);
+  }, 10000).unref();
 }
+
+let dbClosed = false;
+function closeDatabase() {
+  if (dbClosed) return;
+  dbClosed = true;
+  try {
+    db.close();
+  } catch (err) {
+    logError("database close failed during shutdown", {
+      component: "server",
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+// A rejected promise nobody handled has already skipped whatever error path the
+// handler meant to take, so the process state is unknown. Exit non-zero and let
+// the supervisor restart us rather than serve from it.
+process.on("unhandledRejection", (reason) => {
+  logError("unhandled rejection; exiting", {
+    component: "server",
+    err: reason instanceof Error ? reason.message : String(reason),
+  });
+  process.exit(1);
+});
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

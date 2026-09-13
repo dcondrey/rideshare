@@ -114,6 +114,7 @@ get("/static/lib/:name", async (ctx) => {
     "Content-Type",
     TYPES[extname(abs).toLowerCase()] || "application/octet-stream",
   );
+  ctx.res.setHeader("X-Content-Type-Options", "nosniff");
   ctx.res.setHeader("Cache-Control", "public, max-age=86400, immutable");
   ctx.res.end(readFileSync(abs));
 });
@@ -145,6 +146,12 @@ get("/logo", async (ctx) => {
   }
   ctx.res.statusCode = 200;
   ctx.res.setHeader("Content-Type", a.mime);
+  // This handler writes the response itself, so it gets none of the headers
+  // lib/router.js applies in ctx.html/json/redirect. The asset is operator-
+  // uploaded and served unauthenticated, so it carries its own lockdown: nothing
+  // may load, and the declared type may not be second-guessed by the browser.
+  ctx.res.setHeader("Content-Security-Policy", "default-src 'none'");
+  ctx.res.setHeader("X-Content-Type-Options", "nosniff");
   ctx.res.setHeader("Cache-Control", "public, max-age=300");
   ctx.res.setHeader("ETag", `"logo-${a.updatedAt}"`);
   ctx.res.end(a.bytes);

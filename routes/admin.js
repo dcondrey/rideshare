@@ -11,20 +11,23 @@
  *   POST /admin/config           → save overrides
  *   GET  /admin/insights.csv     → CSV export of aggregate metrics
  *   GET  /admin/audit            → recent audit log entries
+ *   GET  /admin/banner           → view / set the site-wide banner
+ *   POST /admin/banner           → set the banner
+ *   POST /admin/banner/clear     → clear the banner
  */
 
 import {
   allowlistCount,
-  appendAllowlist,
+  importAllowlistCsv,
   isAllowed,
   parseAllowlistCsv,
-  replaceAllowlist,
   wipeAllowlist,
 } from "../lib/allowlist.js";
 import { hasLogo, MAX_LOGO_BYTES, removeLogo, uploadLogo } from "../lib/assets.js";
+import { clearBanner, getBanner, setBanner } from "../lib/banner.js";
 import { db } from "../lib/db.js";
 import { errorMessage } from "../lib/errors.js";
-import { getEventConfig, listOverridableKeys, setOverride } from "../lib/event-config.js";
+import { getEventConfig, listOverridableKeys, setOverrides } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
 import {
   activity,
@@ -39,7 +42,7 @@ import {
 import { listStyles } from "../lib/map-styles.js";
 import { createMeetup, deleteMeetup, listMeetups } from "../lib/meetups.js";
 import { rateLimit } from "../lib/rate-limit.js";
-import { get, post } from "../lib/router.js";
+import { csrfProtected, get, post } from "../lib/router.js";
 import { email as emailField, oneOf, optString, reqString } from "../lib/validate.js";
 
 function requireAdmin(ctx) {
@@ -74,6 +77,7 @@ get("/admin", async (ctx) => {
           <nav class="subnav">
             <a href="/admin/allowlist">Attendee allowlist</a>
             <a href="/admin/meetups">Meetup pins</a>
+            <a href="/admin/banner">Site banner</a>
             <a href="/admin/config">Event config & logo</a>
             <a href="/admin/audit">Audit log</a>
             <a href="/admin/insights.csv">Export metrics CSV</a>
@@ -181,10 +185,15 @@ get("/admin/allowlist", async (ctx) => {
             <strong>The file you upload is never written to disk.</strong>
           </p>
           <form method="post" action="/admin/allowlist" class="stacked" id="allowlist-form">
-            <input type="file" accept=".csv,text/csv,text/plain" id="allowlist-file" hidden>
-            <button type="button" class="button" id="allowlist-pick">Choose file…</button>
+            ${ctx.csrfField()}
+            <input type="file" accept=".csv,text/csv,text/plain" id="allowlist-file"
+                   aria-label="Allowlist CSV file" hidden>
+            <button type="button" class="button" id="allowlist-pick"
+                    aria-controls="allowlist-csv">Choose file…</button>
+            <p class="muted small" id="allowlist-file-status" role="status" aria-live="polite"></p>
             <label><span>CSV content</span>
               <textarea name="csv" id="allowlist-csv" rows="10" required
+                        aria-describedby="allowlist-file-status"
                         placeholder="email&#10;alice@example.com&#10;bob@example.com&#10;…"></textarea>
             </label>
             <fieldset class="radio-pair">
@@ -200,6 +209,14 @@ get("/admin/allowlist", async (ctx) => {
                 <span class="muted">Add new entries, keep existing ones.</span>
               </label>
             </fieldset>
+            <label class="muted small">
+              <input type="checkbox" name="confirm_shrink" value="1">
+              <span>
+                Yes, replace even if this file holds far fewer addresses than the
+                allowlist does now. The stored addresses are hashes, so what a
+                replace overwrites cannot be read back.
+              </span>
+            </label>
             <button type="submit" class="button button-primary">Import</button>
           </form>
         </section>
@@ -210,7 +227,10 @@ get("/admin/allowlist", async (ctx) => {
             Look up whether a single email is on the allowlist. Rate-limited and audited.
           </p>
           <form method="post" action="/admin/allowlist/check" class="row">
-            <input type="email" name="email" required placeholder="someone@example.com">
+            ${ctx.csrfField()}
+            <label class="sr-only" for="allowlist-check-email">Email to check</label>
+            <input type="email" name="email" id="allowlist-check-email" required
+                   placeholder="someone@example.com">
             <button type="submit" class="button">Check</button>
           </form>
         </section>
@@ -223,6 +243,7 @@ get("/admin/allowlist", async (ctx) => {
             until you re-import.
           </p>
           <form method="post" action="/admin/allowlist/wipe">
+            ${ctx.csrfField()}
             <button class="button button-danger"
                     onclick="return confirm('Erase all ${allowlistCount()} allowlist entries?')">
               Wipe allowlist
@@ -234,34 +255,40 @@ get("/admin/allowlist", async (ctx) => {
   );
 });
 
-post("/admin/allowlist", async (ctx) => {
-  const user = requireAdmin(ctx);
-  if (!user) return;
-  const body = await ctx.formBody();
-  const csv = reqString(body.csv, "csv", { max: 9 * 1024 * 1024 });
-  const mode = oneOf(body.mode || "replace", "mode", ["replace", "append"]);
-  const { emails, skippedInvalid, totalRows } = parseAllowlistCsv(csv);
-  if (emails.length === 0) {
-    ctx.error("No valid emails found in that CSV.");
-    return;
-  }
-  const result =
-    mode === "replace"
-      ? replaceAllowlist(emails, {
-          actorId: user.id,
-          actorEmail: user.email,
-          ip: ctx.ip(),
-        })
-      : appendAllowlist(emails, {
-          actorId: user.id,
-          actorEmail: user.email,
-          ip: ctx.ip(),
-        });
-  ctx.html(
-    layout({
-      title: "Imported",
-      user,
-      children: html`
+post(
+  "/admin/allowlist",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    const body = await ctx.formBody();
+    const csv = reqString(body.csv, "csv", { max: 9 * 1024 * 1024 });
+    const mode = oneOf(body.mode || "replace", "mode", ["replace", "append"]);
+    const { emails } = parseAllowlistCsv(csv);
+    if (emails.length === 0) {
+      ctx.error("No valid emails found in that CSV.");
+      return;
+    }
+    const result = importAllowlistCsv(csv, {
+      mode,
+      force: (body.confirm_shrink ?? "") !== "",
+      actor: { actorId: user.id, actorEmail: user.email, ip: ctx.ip() },
+    });
+    if (result.refused) {
+      ctx.error(
+        `Refusing to replace ${result.refused.existing} entries with the ` +
+          `${result.refused.parsed} in this file. Nothing was changed — the stored ` +
+          "addresses are hashes, so a wrong file cannot be undone. Check the file, or " +
+          "use Append.",
+        400,
+      );
+      return;
+    }
+    const { skippedInvalid, totalRows } = result;
+    ctx.html(
+      layout({
+        title: "Imported",
+        user,
+        children: html`
         <section class="card centered">
           <h1>Imported ${result.added} ${mode === "append" ? "new " : ""}entries</h1>
           <p class="muted">
@@ -271,42 +298,49 @@ post("/admin/allowlist", async (ctx) => {
           <p><a href="/admin/allowlist" class="button">Back to allowlist</a></p>
         </section>
       `,
-    }),
-  );
-});
+      }),
+    );
+  }),
+);
 
-post("/admin/allowlist/wipe", async (ctx) => {
-  const user = requireAdmin(ctx);
-  if (!user) return;
-  wipeAllowlist({ actorId: user.id, actorEmail: user.email, ip: ctx.ip() });
-  ctx.redirect("/admin/allowlist");
-});
+post(
+  "/admin/allowlist/wipe",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    wipeAllowlist({ actorId: user.id, actorEmail: user.email, ip: ctx.ip() });
+    ctx.redirect("/admin/allowlist");
+  }),
+);
 
-post("/admin/allowlist/check", async (ctx) => {
-  const user = requireAdmin(ctx);
-  if (!user) return;
-  const body = await ctx.formBody();
-  const target = emailField(body.email);
-  const rl = rateLimit(`admincheck:${user.id}`, 30, 60 * 60 * 1000);
-  if (!rl.ok) {
-    ctx.error("You've checked too many emails recently. Try again later.", 429);
-    return;
-  }
-  const present = isAllowed(target);
-  ctx.html(
-    layout({
-      title: "Allowlist check",
-      user,
-      children: html`
+post(
+  "/admin/allowlist/check",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    const body = await ctx.formBody();
+    const target = emailField(body.email);
+    const rl = rateLimit(`admincheck:${user.id}`, 30, 60 * 60 * 1000);
+    if (!rl.ok) {
+      ctx.error("You've checked too many emails recently. Try again later.", 429);
+      return;
+    }
+    const present = isAllowed(target);
+    ctx.html(
+      layout({
+        title: "Allowlist check",
+        user,
+        children: html`
         <section class="card centered">
           <h1>${present ? "✓ On the allowlist" : "✗ Not on the allowlist"}</h1>
           <p class="muted">${target}</p>
           <p><a class="button" href="/admin/allowlist">Back</a></p>
         </section>
       `,
-    }),
-  );
-});
+      }),
+    );
+  }),
+);
 
 // ── Event config editor ──────────────────────────────────────────────────────
 get("/admin/config", async (ctx) => {
@@ -331,6 +365,7 @@ get("/admin/config", async (ctx) => {
         </p>
 
         <form method="post" action="/admin/config" class="card stacked form-grid">
+          ${ctx.csrfField()}
           <h2 class="full">Event</h2>
           ${configField("name", "Short name", event.name)}
           ${configField("longName", "Long name", event.longName)}
@@ -380,23 +415,30 @@ get("/admin/config", async (ctx) => {
                   Current logo: <img src="/logo" alt="" class="logo-preview">
                 </p>
                 <form method="post" action="/admin/logo/remove" class="inline">
+                  ${ctx.csrfField()}
                   <button class="button">Remove logo</button>
                 </form>`
               : html`<p class="muted">No logo uploaded. Upload one below, or set <code>brand.logoPath</code> above to point at a file in <code>public/</code>.</p>`
           }
           <form method="post" action="/admin/logo" class="stacked" id="logo-form">
-            <input type="file" id="logo-file" accept="image/svg+xml,image/png,image/webp,image/jpeg" hidden>
-            <button type="button" class="button" id="logo-pick">Choose image…</button>
+            ${ctx.csrfField()}
+            <input type="file" id="logo-file" accept="image/png,image/webp,image/jpeg"
+                   aria-label="Logo image file" hidden>
+            <button type="button" class="button" id="logo-pick"
+                    aria-describedby="logo-constraints">Choose image…</button>
             <input type="hidden" name="logo_data_url" id="logo-data-url">
+            <p class="muted small" id="logo-status" role="status" aria-live="polite"></p>
             <p class="muted small" id="logo-preview-row" hidden>
-              Preview: <img id="logo-preview-img" alt="" style="max-height:48px;vertical-align:middle">
+              Preview: <img id="logo-preview-img" alt="Selected logo preview"
+                            style="max-height:48px;vertical-align:middle">
               <span id="logo-size"></span>
             </p>
-            <p class="muted small">
+            <p class="muted small" id="logo-constraints">
               SVG, PNG, WebP or JPEG. Max ${Math.round(MAX_LOGO_BYTES / 1024)}KB.
               Stored in the database; served from <code>/logo</code>.
             </p>
-            <button type="submit" class="button button-primary" id="logo-submit" disabled>Upload logo</button>
+            <button type="submit" class="button button-primary" id="logo-submit"
+                    aria-describedby="logo-constraints" disabled>Upload logo</button>
           </form>
         </section>
         <script src="/app.js" defer></script>
@@ -412,52 +454,71 @@ function configField(key, label, value) {
   </label>`;
 }
 
-post("/admin/config", async (ctx) => {
-  const user = requireAdmin(ctx);
-  if (!user) return;
-  const body = await ctx.formBody();
-  for (const key of listOverridableKeys()) {
-    const v = (body[key] ?? "").trim();
-    /** @type {string | number | null} */
-    let coerced = v === "" ? null : v;
-    // Numeric coercion for known number fields
-    if (
-      coerced != null &&
-      (key === "venue.lat" || key === "venue.lng" || key === "map.defaultZoom")
-    ) {
-      const n = parseFloat(v);
-      if (!Number.isFinite(n)) coerced = null;
-      else coerced = key === "map.defaultZoom" ? Math.round(n) : n;
+post(
+  "/admin/config",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    const body = await ctx.formBody();
+    /** @type {[string, string | number | null][]} */
+    const entries = [];
+    for (const key of listOverridableKeys()) {
+      const v = (body[key] ?? "").trim();
+      /** @type {string | number | null} */
+      let coerced = v === "" ? null : v;
+      // Numeric coercion for known number fields
+      if (
+        coerced != null &&
+        (key === "venue.lat" || key === "venue.lng" || key === "map.defaultZoom")
+      ) {
+        const n = parseFloat(v);
+        if (!Number.isFinite(n)) coerced = null;
+        else coerced = key === "map.defaultZoom" ? Math.round(n) : n;
+      }
+      entries.push([key, coerced]);
     }
-    setOverride(key, coerced);
-  }
-  ctx.redirect("/admin/config");
-});
+    // Written as one unit: setOverrides rejects the batch if it would leave the
+    // config failing the schema the boot file is held to.
+    try {
+      setOverrides(entries);
+    } catch (err) {
+      ctx.error(`Config not saved. ${errorMessage(err)}`, 400);
+      return;
+    }
+    ctx.redirect("/admin/config");
+  }),
+);
 
-post("/admin/logo", async (ctx) => {
-  const user = requireAdmin(ctx);
-  if (!user) return;
-  const body = await ctx.formBody();
-  const dataUrl = body.logo_data_url || "";
-  if (!dataUrl) {
-    ctx.error("No image selected.", 400);
-    return;
-  }
-  try {
-    uploadLogo(dataUrl, { actorId: user.id, actorEmail: user.email });
-  } catch (err) {
-    ctx.error(errorMessage(err), 400);
-    return;
-  }
-  ctx.redirect("/admin/config");
-});
+post(
+  "/admin/logo",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    const body = await ctx.formBody();
+    const dataUrl = body.logo_data_url || "";
+    if (!dataUrl) {
+      ctx.error("No image selected.", 400);
+      return;
+    }
+    try {
+      uploadLogo(dataUrl, { actorId: user.id, actorEmail: user.email });
+    } catch (err) {
+      ctx.error(errorMessage(err), 400);
+      return;
+    }
+    ctx.redirect("/admin/config");
+  }),
+);
 
-post("/admin/logo/remove", async (ctx) => {
-  const user = requireAdmin(ctx);
-  if (!user) return;
-  removeLogo({ actorId: user.id, actorEmail: user.email });
-  ctx.redirect("/admin/config");
-});
+post(
+  "/admin/logo/remove",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    removeLogo({ actorId: user.id, actorEmail: user.email });
+    ctx.redirect("/admin/config");
+  }),
+);
 
 // ── Meetups ──────────────────────────────────────────────────────────────────
 get("/admin/meetups", async (ctx) => {
@@ -482,6 +543,7 @@ get("/admin/meetups", async (ctx) => {
         <section class="card">
           <h2>Add a meetup</h2>
           <form method="post" action="/admin/meetups" class="stacked form-grid">
+            ${ctx.csrfField()}
             <label class="full">
               <span>Name</span>
               <input type="text" name="name" maxlength="100" required placeholder="Hotel Avante">
@@ -520,6 +582,7 @@ get("/admin/meetups", async (ctx) => {
                         <span class="muted small"> — ${m.lat.toFixed(5)}, ${m.lng.toFixed(5)}</span>
                         ${m.address ? html`<p class="muted small">${m.address}</p>` : ""}
                         <form method="post" action="/admin/meetups/${m.id}/delete" class="inline">
+                          ${ctx.csrfField()}
                           <button class="button button-small"
                                   onclick="return confirm('Delete this meetup?')">Delete</button>
                         </form>
@@ -533,35 +596,125 @@ get("/admin/meetups", async (ctx) => {
   );
 });
 
-post("/admin/meetups", async (ctx) => {
+post(
+  "/admin/meetups",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    const body = await ctx.formBody();
+    const name = reqString(body.name, "name", { max: 100 });
+    const address = optString(body.address, "address", { max: 200 });
+    const lat = parseFloat(body.lat ?? "");
+    const lng = parseFloat(body.lng ?? "");
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      ctx.error("Latitude must be a number between -90 and 90.", 400);
+      return;
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      ctx.error("Longitude must be a number between -180 and 180.", 400);
+      return;
+    }
+    createMeetup({ name, address, lat, lng }, { actorId: user.id, actorEmail: user.email });
+    ctx.redirect("/admin/meetups");
+  }),
+);
+
+post(
+  "/admin/meetups/:id/delete",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    deleteMeetup(parseInt(ctx.params.id, 10), {
+      actorId: user.id,
+      actorEmail: user.email,
+    });
+    ctx.redirect("/admin/meetups");
+  }),
+);
+
+// ── Site banner ──────────────────────────────────────────────────────────────
+get("/admin/banner", async (ctx) => {
   const user = requireAdmin(ctx);
   if (!user) return;
-  const body = await ctx.formBody();
-  const name = reqString(body.name, "name", { max: 100 });
-  const address = optString(body.address, "address", { max: 200 });
-  const lat = parseFloat(body.lat ?? "");
-  const lng = parseFloat(body.lng ?? "");
-  if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-    ctx.error("Latitude must be a number between -90 and 90.", 400);
-    return;
-  }
-  if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
-    ctx.error("Longitude must be a number between -180 and 180.", 400);
-    return;
-  }
-  createMeetup({ name, address, lat, lng }, { actorId: user.id, actorEmail: user.email });
-  ctx.redirect("/admin/meetups");
+  const banner = getBanner();
+  ctx.html(
+    layout({
+      title: "Site banner",
+      user,
+      children: html`
+        <section class="page-head">
+          <a class="link" href="/admin">← Admin</a>
+          <h1>Site banner</h1>
+        </section>
+        <p class="muted">
+          Shown on every page for live-incident comms (mail outage, DB-restore
+          cutoff, etc.) without editing config files or restarting the server.
+        </p>
+
+        ${
+          banner
+            ? html`
+                <section class="card">
+                  <h2>Current banner</h2>
+                  <div class="flash flash-${banner.severity}" role="status">${banner.message}</div>
+                  <form method="post" action="/admin/banner/clear" class="inline">
+                    ${ctx.csrfField()}
+                    <button class="button button-small"
+                            onclick="return confirm('Clear the site banner?')">Clear</button>
+                  </form>
+                </section>
+              `
+            : html`<p class="muted">No banner is currently set.</p>`
+        }
+
+        <section class="card">
+          <h2>${banner ? "Replace banner" : "Set a banner"}</h2>
+          <form method="post" action="/admin/banner" class="stacked form-grid">
+            ${ctx.csrfField()}
+            <label class="full">
+              <span>Message</span>
+              <textarea name="message" maxlength="300" required rows="3"
+                        placeholder="Email delivery is delayed — ride confirmations may arrive late.">${banner?.message ?? ""}</textarea>
+            </label>
+            <label>
+              <span>Severity</span>
+              <select name="severity">
+                <option value="info" ${banner?.severity !== "warning" ? "selected" : ""}>Info</option>
+                <option value="warning" ${banner?.severity === "warning" ? "selected" : ""}>Warning</option>
+              </select>
+            </label>
+            <div class="form-actions full">
+              <button class="button button-primary">Save banner</button>
+            </div>
+          </form>
+        </section>
+      `,
+    }),
+  );
 });
 
-post("/admin/meetups/:id/delete", async (ctx) => {
-  const user = requireAdmin(ctx);
-  if (!user) return;
-  deleteMeetup(parseInt(ctx.params.id, 10), {
-    actorId: user.id,
-    actorEmail: user.email,
-  });
-  ctx.redirect("/admin/meetups");
-});
+post(
+  "/admin/banner",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    const body = await ctx.formBody();
+    const message = reqString(body.message, "message", { max: 300 });
+    const severity = oneOf(body.severity || "info", "severity", ["info", "warning"]);
+    setBanner({ message, severity }, { actorId: user.id, actorEmail: user.email, ip: ctx.ip() });
+    ctx.redirect("/admin/banner");
+  }),
+);
+
+post(
+  "/admin/banner/clear",
+  csrfProtected(async (ctx) => {
+    const user = requireAdmin(ctx);
+    if (!user) return;
+    clearBanner({ actorId: user.id, actorEmail: user.email, ip: ctx.ip() });
+    ctx.redirect("/admin/banner");
+  }),
+);
 
 // ── Insights export ──────────────────────────────────────────────────────────
 get("/admin/insights.csv", async (ctx) => {

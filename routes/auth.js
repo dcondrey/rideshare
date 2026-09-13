@@ -19,6 +19,7 @@ import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
 import { error as logError } from "../lib/log.js";
 import { get, post } from "../lib/router.js";
+import { landingJsonLd, socialCard } from "../lib/seo.js";
 import { email as emailField } from "../lib/validate.js";
 
 get("/", async (ctx) => {
@@ -31,9 +32,25 @@ get("/", async (ctx) => {
     layout({
       title: "Sign in",
       user: null,
+      description: event.tagline,
+      indexable: true,
+      jsonLd: landingJsonLd(event),
+      og: socialCard({
+        event,
+        title: event.longName,
+        description: event.tagline,
+        path: "/",
+      }),
+      // /about is the only other page a signed-out visitor can reach, and it is
+      // static, so it is worth prerendering outright rather than prefetching.
+      speculation: {
+        prerender: [
+          { source: "document", where: { href_matches: "/about" }, eagerness: "moderate" },
+        ],
+      },
       children: html`
-        <section class="hero">
-          <h1 class="hero-title">${event.longName}</h1>
+        <section class="hero" aria-labelledby="hero-title">
+          <h1 class="hero-title" id="hero-title">${event.longName}</h1>
           <p class="hero-tagline">${event.tagline}</p>
           <p class="hero-meta">
             <strong>${event.dates.start}</strong> – <strong>${event.dates.end}</strong>
@@ -41,8 +58,8 @@ get("/", async (ctx) => {
           </p>
         </section>
 
-        <section class="card sign-in-card">
-          <h2>Sign in with your email</h2>
+        <section class="card sign-in-card" aria-labelledby="sign-in-title">
+          <h2 id="sign-in-title">Sign in with your email</h2>
           <p class="muted">
             Enter the email you used to register. We'll send you a one-time link.
           </p>
@@ -65,8 +82,8 @@ get("/", async (ctx) => {
           }
         </section>
 
-        <section class="how-it-works">
-          <h2>How it works</h2>
+        <section class="how-it-works" aria-labelledby="how-it-works-title">
+          <h2 id="how-it-works-title">How it works</h2>
           <ol>
             <li><strong>Sign in</strong> with your registered email.</li>
             <li><strong>Post a ride</strong> you're offering, or <strong>request</strong> one you need.</li>
