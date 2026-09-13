@@ -6,9 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Validate the event config at load and untrack the live one
+- Key ride confirmations and issued credentials by claim
+- Add key custody, SSRF-safe fetch, event schema, banner, seo and health modules
 - Initial release of event rideshare platform
 
 ### Documentation
+- Document key custody, the new controls and the operator procedures
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Restore CI and OpenSSF badges
 - Fix README header rendering and badge accuracy
@@ -32,6 +37,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Key map tiles per world copy and anchor pinch zoom on the midpoint
+- Report allowlist file progress without blocking or a modal
+- Bound request/body/email latency and retry transient DB/email failures
 - Run tsc through npx -p so the typecheck step executes
 - Remove the last bare any casts, all six CI gates green
 - Bring the Biome gate back to green
@@ -46,6 +54,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Harden setPath() against prototype pollution (#7)
 - Escape/validate untrusted map config before DOM insertion (#6)
 - Prevent log injection and tainted-format-string in error logging (#5)
+
+### Security
+- Close the auth, logging, upload and outbound-request gaps
 
 ### Style
 - Apply the repo's Biome formatting and safe lint fixes
