@@ -35,8 +35,17 @@ import {
   withdrawClaim,
 } from "../lib/rides.js";
 import { get, post } from "../lib/router.js";
+import { aboutJsonLd, socialCard } from "../lib/seo.js";
 import { trustBadgeFor } from "../lib/trust.js";
-import { hhmm, isoDate, oneOf, optString, reqInt, reqString } from "../lib/validate.js";
+import {
+  hhmm,
+  isoDate,
+  oneOf,
+  optString,
+  reqInt,
+  reqString,
+  ValidationError,
+} from "../lib/validate.js";
 
 // Helpers ────────────────────────────────────────────────────────────────────
 function requireUser(ctx) {
@@ -47,9 +56,16 @@ function requireUser(ctx) {
   return ctx.user;
 }
 
-function airportName(code) {
-  const a = getEventConfig().airports.find((x) => x.code === code);
-  return a ? `${a.code} — ${a.name}` : code;
+/**
+ * Human label for a ride's pickup point. `OTHER` is not in event.airports, so
+ * without other_place it renders as the bare word OTHER and the counterparty
+ * has no way to learn where the pickup is.
+ * @param {{ airport: string, other_place?: string | null }} ride
+ */
+function airportName(ride) {
+  if (ride.airport === "OTHER") return ride.other_place || "Other pickup point";
+  const a = getEventConfig().airports.find((x) => x.code === ride.airport);
+  return a ? `${a.code} — ${a.name}` : ride.airport;
 }
 function directionLabel(d) {
   return d === "to_venue" ? "→ to venue" : "← from venue";
@@ -78,7 +94,7 @@ function rideCard(ride, { showActions = true } = {}) {
         }
       </header>
       <h3 class="ride-card-title">
-        <a href="/rides/${ride.id}">${airportName(ride.airport)}</a>
+        <a href="/rides/${ride.id}">${airportName(ride)}</a>
       </h3>
       <dl class="ride-card-meta">
         <div><dt>When</dt><dd>${fmtDateTime(ride.depart_date, ride.depart_time)}${ride.flex_minutes ? html` <span class="muted">±${ride.flex_minutes}m</span>` : ""}</dd></div>
@@ -200,6 +216,14 @@ post("/rides/new", async (ctx) => {
   const otherPlace =
     airport === "OTHER" ? reqString(body.other_place, "other_place", { max: 100 }) : null;
   const departDate = isoDate(body.depart_date, "depart_date");
+  // The form carries min/max, so only a direct POST reaches this. Without it a
+  // ride dated outside the event shows up in browse as an ordinary open ride.
+  if (event.dates?.start && departDate < event.dates.start) {
+    throw new ValidationError("depart_date", `must not be before ${event.dates.start}`);
+  }
+  if (event.dates?.end && departDate > event.dates.end) {
+    throw new ValidationError("depart_date", `must not be after ${event.dates.end}`);
+  }
   const departTime = hhmm(body.depart_time, "depart_time");
   const flexMinutes = reqInt(body.flex_minutes ?? "0", "flex_minutes", {
     min: 0,
@@ -210,6 +234,11 @@ post("/rides/new", async (ctx) => {
 
   const meetupIdRaw = (body.meetup_id ?? "").trim();
   const meetupId = meetupIdRaw === "" ? null : parseInt(meetupIdRaw, 10);
+  // foreign_keys=ON turns an unknown id into a raw INSERT failure, which
+  // dispatch() renders as a 500 rather than a field error.
+  if (meetupId !== null && !listMeetups().some((m) => m.id === meetupId)) {
+    throw new ValidationError("meetup_id", "is not a meetup on this event");
+  }
   let pickupLat = null,
     pickupLng = null;
   const latRaw = (body.pickup_lat ?? "").trim();
@@ -279,7 +308,7 @@ function postForm({ values = {} }) {
       </label>
 
       <label><span>Airport / location</span>
-        <select name="airport" required id="airport-select">
+        <select name="airport" required id="airport-select" aria-controls="other-place-label">
           ${event.airports.map((a) => html`<option value="${a.code}">${a.code} — ${a.name}</option>`)}
           <option value="OTHER">Other (specify)</option>
         </select>
@@ -412,7 +441,7 @@ get("/rides/mine", async (ctx) => {
                       <span class="badge badge-${c.kind}">${kindLabel(c.kind)}</span>
                       <span class="ride-card-direction">${directionLabel(c.direction)}</span>
                     </header>
-                    <h3 class="ride-card-title">${airportName(c.airport)}</h3>
+                    <h3 class="ride-card-title">${airportName(c)}</h3>
                     <dl class="ride-card-meta">
                       <div><dt>When</dt><dd>${fmtDateTime(c.depart_date, c.depart_time)}</dd></div>
                       <div><dt>Status</dt><dd><strong>${c.status}</strong></dd></div>
@@ -463,7 +492,7 @@ get("/rides/:id", async (ctx) => {
     : null;
   ctx.html(
     layout({
-      title: airportName(ride.airport),
+      title: airportName(ride),
       user,
       children: html`
         <section class="page-head">
@@ -615,19 +644,35 @@ post("/rides/:id/full", async (ctx) => {
   ctx.redirect("/rides/mine");
 });
 
-post("/claims/:id/accept", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  decideClaim(parseInt(ctx.params.id, 10), user.id, "accepted");
-  ctx.redirect("/rides/mine");
-});
+/**
+ * decideClaim throws plain Errors. A poster double-clicking Accept, or acting
+ * from two tabs, hits "Already decided" — an ordinary outcome, not a 500.
+ * @param {string} message
+ */
+function claimDecisionStatus(message) {
+  if (/not found/i.test(message)) return 404;
+  if (/not allowed/i.test(message)) return 403;
+  return 400;
+}
 
-post("/claims/:id/decline", async (ctx) => {
-  const user = requireUser(ctx);
-  if (!user) return;
-  decideClaim(parseInt(ctx.params.id, 10), user.id, "declined");
-  ctx.redirect("/rides/mine");
-});
+/** @param {'accepted'|'declined'} decision */
+function decideClaimRoute(decision) {
+  return async (ctx) => {
+    const user = requireUser(ctx);
+    if (!user) return;
+    try {
+      decideClaim(parseInt(ctx.params.id, 10), user.id, decision);
+    } catch (err) {
+      const message = errorMessage(err);
+      ctx.error(message, claimDecisionStatus(message));
+      return;
+    }
+    ctx.redirect("/rides/mine");
+  };
+}
+
+post("/claims/:id/accept", decideClaimRoute("accepted"));
+post("/claims/:id/decline", decideClaimRoute("declined"));
 
 post("/claims/:id/withdraw", async (ctx) => {
   const user = requireUser(ctx);
@@ -690,15 +735,24 @@ get("/about", async (ctx) => {
     layout({
       title: "About",
       user: ctx.user,
+      description: `How ${event.name} Rideshare works, and what it does with your data.`,
+      indexable: true,
+      jsonLd: aboutJsonLd(event),
+      og: socialCard({
+        event,
+        title: `About ${event.name} Rideshare`,
+        description: `A self-hosted, zero-dependency ride coordination tool for ${event.name} attendees.`,
+        path: "/about",
+      }),
       children: html`
-        <section class="prose">
-          <h1>About this app</h1>
+        <section class="prose" aria-labelledby="about-title">
+          <h1 id="about-title">About this app</h1>
           <p>
             ${event.name} Rideshare is a self-hosted, open-source coordination tool
             for event attendees. It runs as a single Node.js process with zero
             third-party dependencies and stores data in a local SQLite database.
           </p>
-          <h2>Privacy</h2>
+          <h2 id="about-privacy">Privacy</h2>
           <ul>
             <li>The attendee allowlist is stored as one-way HMAC hashes.</li>
             <li>No third-party analytics or trackers are loaded.</li>

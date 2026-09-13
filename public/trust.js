@@ -53,15 +53,6 @@
     return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  function _b64uToBytes(s) {
-    s = String(s).replace(/-/g, "+").replace(/_/g, "/");
-    while (s.length % 4) s += "=";
-    const bin = atob(s);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-
   // ── IndexedDB storage ─────────────────────────────────────────────────────
   const DB_NAME = "rideshare-trust";
   const STORE = "keys";
@@ -215,7 +206,7 @@
     });
   }
 
-  function _importKeyJwk(backup) {
+  function importKeyJwk(backup) {
     if (!backup?.privateKeyJwk || !backup.publicKeyJwk) {
       throw new Error("Backup file missing key material");
     }
@@ -226,11 +217,13 @@
       const kp = { privateKey: pair[0], publicKey: pair[1] };
       return crypto.subtle.exportKey("raw", pair[1]).then((raw) => {
         const did = pubKeyToDidKey(raw);
-        return idbPut("kp", {
-          keyPair: kp,
-          did: did,
-          createdAt: Date.now(),
-        }).then(() => ({ did: did }));
+        // IMPORTANT: prove the two halves of the backup belong together before
+        // anything is written. A file whose public half does not verify the
+        // private half's signature would overwrite a working key with one that
+        // can never satisfy the bind challenge.
+        return signWithKey(kp, `rideshare-restore:${did}`)
+          .then(() => idbPut("kp", { keyPair: kp, did: did, createdAt: Date.now() }))
+          .then(() => ({ did: did }));
       });
     });
   }
@@ -311,6 +304,47 @@
     });
   }
 
+  function bindRestoreControl(pickBtn, fileInput, status, expectedDid) {
+    pickBtn.addEventListener("click", () => {
+      fileInput.click();
+    });
+    fileInput.addEventListener("change", () => {
+      const f = fileInput.files?.[0];
+      if (!f) return;
+      status.textContent = "Reading backup…";
+      f.text()
+        .then((text) => {
+          const backup = JSON.parse(text);
+          // The account already names a DID. Restoring a different key would
+          // leave the browser holding one identity and the server another, so
+          // refuse before touching IndexedDB rather than after.
+          if (expectedDid && backup.did && backup.did !== expectedDid) {
+            throw new Error(`That backup is for ${backup.did}, not ${expectedDid}.`);
+          }
+          return importKeyJwk(backup);
+        })
+        .then((res) => {
+          if (expectedDid && res.did !== expectedDid) {
+            throw new Error("The restored key does not derive the DID bound to this account.");
+          }
+          status.textContent = "Restored. Re-binding…";
+          return bindCurrentKey().then((r) => {
+            if (!r?.ok) throw new Error(r?.error || "bind failed");
+            status.textContent = `✓ Restored: ${res.did}. Reloading…`;
+            setTimeout(() => {
+              location.reload();
+            }, 600);
+          });
+        })
+        .catch((err) => {
+          status.textContent = `Restore failed: ${err.message}`;
+        })
+        .finally(() => {
+          fileInput.value = "";
+        });
+    });
+  }
+
   function bindRotateButton(btn) {
     btn.addEventListener("click", () => {
       if (
@@ -381,20 +415,40 @@
       })
         .then((r) => r.json())
         .then((body) => {
-          let html = `<p><strong>${body.imported} of ${body.total} imported.</strong></p>`;
-          html += "<ul>";
+          // IMPORTANT: every field here originates in a pasted credential —
+          // r.id is the JWT's jti, r.error/r.errors quote the issuer and alg
+          // back verbatim. Built as nodes so a crafted bundle cannot inject
+          // markup into the page of whoever imports it.
+          results.replaceChildren();
+          const head = document.createElement("p");
+          const strong = document.createElement("strong");
+          strong.textContent = `${body.imported} of ${body.total} imported.`;
+          head.appendChild(strong);
+          results.appendChild(head);
+
+          const list = document.createElement("ul");
           (body.results || []).forEach((r, i) => {
+            const li = document.createElement("li");
             if (r.ok) {
-              html += `<li class="check-pass">#${i + 1} — ${r.id || "imported"}</li>`;
+              li.className = "check-pass";
+              li.textContent = `#${i + 1} — ${r.id || "imported"}`;
             } else {
-              html += `<li class="check-fail">#${i + 1} — ${r.error || "failed"}`;
-              if (r.errors?.length) html += ` · ${r.errors.join(", ")}`;
-              html += "</li>";
+              li.className = "check-fail";
+              const detail = r.errors?.length ? ` · ${r.errors.join(", ")}` : "";
+              li.textContent = `#${i + 1} — ${r.error || "failed"}${detail}`;
             }
+            list.appendChild(li);
           });
-          html += "</ul>";
-          if (body.imported > 0) html += '<p><a href="/trust">Reload to see them →</a></p>';
-          results.innerHTML = html;
+          results.appendChild(list);
+
+          if (body.imported > 0) {
+            const p = document.createElement("p");
+            const a = document.createElement("a");
+            a.href = "/trust";
+            a.textContent = "Reload to see them →";
+            p.appendChild(a);
+            results.appendChild(p);
+          }
         })
         .catch((err) => {
           results.textContent = `Import failed: ${err.message}`;
@@ -418,6 +472,18 @@
 
     const rot = document.getElementById("trust-rotate-key");
     if (rot) bindRotateButton(rot);
+
+    const restorePick = document.getElementById("trust-restore-pick");
+    const restoreFile = document.getElementById("trust-restore-file");
+    const restoreStatus = document.getElementById("trust-restore-status");
+    if (restorePick && restoreFile && restoreStatus) {
+      bindRestoreControl(
+        restorePick,
+        restoreFile,
+        restoreStatus,
+        restoreFile.dataset.expectedDid || null,
+      );
+    }
 
     const form = document.getElementById("trust-import-form");
     const ta = document.getElementById("trust-import-text");

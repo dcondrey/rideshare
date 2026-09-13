@@ -35,6 +35,11 @@ import {
 import { reqString } from "../lib/validate.js";
 import { decodeJwt, verifyCredential } from "../lib/vc.js";
 
+// Shared by /trust/import, /trust/import-bundle and the unauthenticated
+// /trust/verify, so one route cannot become the soft way in.
+const MAX_JWT_CHARS = 8192;
+const MAX_BUNDLE_CREDENTIALS = 50;
+
 function requireUser(ctx) {
   if (!ctx.user) {
     ctx.redirect("/");
@@ -97,8 +102,16 @@ get("/trust", async (ctx) => {
                 </p>
                 <div class="row">
                   <button class="button" id="trust-export-key">Download key backup</button>
+                  <button class="button" id="trust-restore-pick">Restore from backup</button>
                   <button class="button" id="trust-rotate-key">Generate new key (revokes old)</button>
                 </div>
+                <input type="file" id="trust-restore-file" accept="application/json,.json"
+                       hidden data-expected-did="${userDid.did}">
+                <p class="muted small" id="trust-restore-status"></p>
+                <p class="muted small">
+                  Cleared your site data, or on a new browser? Restore the backup you
+                  downloaded here. It has to be the backup for the DID above.
+                </p>
               </section>`
             : html`
               <section class="card">
@@ -108,10 +121,15 @@ get("/trust", async (ctx) => {
                   Web Crypto API. The private key is stored only on this device,
                   never sent to us.
                 </p>
-                <button class="button button-primary" id="trust-create-key">
-                  Generate did:key
-                </button>
+                <div class="row">
+                  <button class="button button-primary" id="trust-create-key">
+                    Generate did:key
+                  </button>
+                  <button class="button" id="trust-restore-pick">Restore from backup</button>
+                </div>
+                <input type="file" id="trust-restore-file" accept="application/json,.json" hidden>
                 <p class="muted small" id="trust-create-status"></p>
+                <p class="muted small" id="trust-restore-status"></p>
               </section>`
         }
 
@@ -229,7 +247,7 @@ post("/trust/import", async (ctx) => {
   }
   const r = await importCredential({
     userId: user.id,
-    jwt: reqString(body.jwt, "jwt", { max: 8192 }),
+    jwt: reqString(body.jwt, "jwt", { max: MAX_JWT_CHARS }),
   });
   ctx.json(r, r.ok ? 200 : 400);
 });
@@ -246,9 +264,22 @@ post("/trust/import-bundle", async (ctx) => {
   } else if (body?.jwts && Array.isArray(body.jwts)) {
     jwts = body.jwts.filter((x) => typeof x === "string");
   }
+  if (jwts.length > MAX_BUNDLE_CREDENTIALS) {
+    ctx.json(
+      { ok: false, error: `Too many credentials in one bundle (max ${MAX_BUNDLE_CREDENTIALS}).` },
+      400,
+    );
+    return;
+  }
   /** @type {Array<{ ok: boolean, id?: string, error?: string }>} */
   const results = [];
   for (const jwt of jwts) {
+    // Each element is imported on the same terms as a single /trust/import: one
+    // oversized member would otherwise walk straight past that route's cap.
+    if (jwt.length > MAX_JWT_CHARS) {
+      results.push({ ok: false, error: `Credential too large (max ${MAX_JWT_CHARS} characters).` });
+      continue;
+    }
     try {
       results.push(await importCredential({ userId: user.id, jwt }));
     } catch (err) {
@@ -378,6 +409,12 @@ post("/trust/verify", async (ctx) => {
   }
   if (!jwt) {
     ctx.error("Provide a JWT.", 400);
+    return;
+  }
+  // This route needs no session, so it is the cheapest way to hand the verifier
+  // an oversized input. The same cap as /trust/import above.
+  if (jwt.length > MAX_JWT_CHARS) {
+    ctx.error(`JWT too large (max ${MAX_JWT_CHARS} characters).`, 400);
     return;
   }
   const result = await verifyCredential(jwt);
