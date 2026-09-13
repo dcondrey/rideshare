@@ -47,45 +47,60 @@ Every interpolated value (`${...}`) is HTML-escaped. The escape function replace
 
 ## Layer 2 — Strict Content Security Policy
 
-Set in `lib/router.js` on every HTML response:
+Set in `lib/router.js` on every response that goes through `ctx.html`,
+`ctx.json` or `ctx.redirect`:
 
 ```
 Content-Security-Policy:
   default-src 'self';
-  script-src 'self' 'nonce-<128-bit-random>';
-  style-src 'self' 'nonce-<128-bit-random>';
-  img-src 'self' data: <tile-host>;
+  img-src 'self' data: https:;
+  style-src 'self';
+  script-src 'self' 'inline-speculation-rules';
   connect-src 'self';
-  font-src 'self';
-  frame-ancestors 'none';
-  base-uri 'none';
-  object-src 'none';
   form-action 'self';
-  upgrade-insecure-requests;
+  base-uri 'self';
+  object-src 'none';
+  frame-ancestors 'none'
 ```
 
 Notes:
 
-- **No `unsafe-inline`.** Inline scripts and styles must carry the per-request nonce. The nonce is fresh per request, so an attacker who captures a page's HTML cannot precompute a script that would be allowed on the next request.
-- **No `unsafe-eval`.** No `eval`, no `new Function(...)`, no `setTimeout('string', ...)` in our codebase or any allowed inline script.
-- **No wildcards.** Every source is explicit.
+- **No `unsafe-inline`, no nonce.** There is no inline script to allow:
+  `'inline-speculation-rules'` permits `<script type="speculationrules">` and
+  nothing executable. A nonce-based policy would mean threading a per-request
+  nonce through every `<script src>` in `routes/` to buy one inline JSON block,
+  so it is deliberately not used. There is no `cspNonce` in this codebase.
+- **No `unsafe-eval`.** No `eval`, no `new Function(...)`, no `setTimeout('string', ...)`.
+- **No wildcards, except `img-src https:`** — map tiles are fetched by the
+  browser from whichever provider `event.config.yaml` names, and the provider is
+  operator-configurable, so the scheme is allowed rather than a host list.
+  `data:` covers inline raster icons.
 - **`frame-ancestors 'none'`** stops click-jacking by refusing to be embedded in any iframe.
-- **`base-uri 'none'`** stops `<base href="evil.example.com/">` injection.
+- **`base-uri 'self'`** stops `<base href="evil.example.com/">` injection.
 - **`object-src 'none'`** stops Flash/Java/`<embed>` content.
 - **`form-action 'self'`** stops a hijacked page from `<form action="evil...">`.
-- **`img-src` includes the tile host** because the slippy-map renderer fetches tiles from there (or from `'self'` if the operator enables the tile proxy — recommended). `data:` is allowed for inline raster icons in the UI.
 
-The nonce is produced by `crypto.randomBytes(16).toString('base64')` per request, and applied to the literal string `nonce-` in the header plus to the `nonce` attribute on every `<script>` and `<style>` element the template emits. Search `lib/router.js` for `cspNonce`.
+The header set is applied once in `dispatch()` before the handler runs
+(`lib/router.js`), so a handler writing bytes straight to `ctx.res` — every
+route in `routes/static.js` — gets it too. It used to be attached per response
+helper, which silently exempted every static asset. A handler needing something
+tighter overrides that one header afterwards: `/logo` serves operator-uploaded
+bytes unauthenticated and replaces the policy with `default-src 'none'`.
 
 ### What CSP does NOT defend against
 
 - Stored data that isn't rendered as HTML (e.g., a CSV export of contact info). CSP applies to HTML pages; CSV exports are TSV-quoted at write.
 - Attacks against the browser itself (Spectre, GPU pixel leaks). Out of scope (see [`THREAT_MODEL.md`](../../THREAT_MODEL.md) residual risks).
-- A vulnerability in our HTML template that produces `<script nonce="<correct-nonce>">attacker stuff</script>`. That would require the template author to explicitly opt out via `raw()` AND include the nonce, which is essentially "we wrote an XSS by hand." Layer 1 + the `raw()` audit (Layer 3) catch this.
+- A vulnerability in our HTML template that produces attacker markup inside a
+  `<script>` block. That requires the template author to opt out via `raw()`,
+  which is what the Layer 3 audit covers.
 
 ### Reporting
 
-In production we set `Content-Security-Policy-Report-Only: ...; report-to default` *in addition* to the enforcing header, with `report-to` pointing at `/csp-report`. Violations are written to the audit log. Spike in reports → investigate. (No third-party CSP reporting service; the report endpoint is on our origin.)
+Not implemented. There is no `Content-Security-Policy-Report-Only` header and no
+`/csp-report` endpoint; violations are visible only in the visitor's own browser
+console. Adding one means a route, a body cap, and a rate limit, since the
+endpoint would be unauthenticated by definition.
 
 ---
 
@@ -95,24 +110,28 @@ In production we set `Content-Security-Policy-Report-Only: ...; report-to defaul
 
 Use cases (the only ones currently in the codebase):
 
-- The deployment logo SVG, after server-side sanitisation.
-- The user's avatar SVG, after the same sanitiser.
+- JSON embedded in a `<script type="application/ld+json">` or
+  `type="speculationrules"` block, escaped for that context by `jsonScriptSafe()`
+  (`lib/html.js`).
+- The tile provider's attribution string from `event.config.yaml`, which is
+  operator-authored config, not user input (`routes/map.js`).
 - Computed HTML produced by another `html\`\`` call (which is already safe — but `raw()` makes the trust explicit at the call site).
+
+No uploaded image is ever spliced into a page as markup.
 
 **Every `raw()` call in `lib/`, `routes/`, and templates is reviewed.** A new `raw()` call requires a security-impact note on the PR (see [`CONTRIBUTING.md`](../../CONTRIBUTING.md)). Reviewers grep for `raw\(` on every PR touching templates.
 
-### The SVG sanitiser
+### SVG uploads: refused, not sanitised
 
-`lib/svgSanitise.js` (or whatever the current name is — see `lib/` listing in [`docs/code-reading-guide.md`](../code-reading-guide.md)). Strips:
+There is no SVG sanitiser, and deliberately so. `ALLOWED_LOGO_MIMES` in
+`lib/assets.js` is `image/png`, `image/webp`, `image/jpeg`; an SVG upload is
+rejected at the boundary.
 
-- `<script>` elements.
-- `<foreignObject>` elements (can carry HTML).
-- All event-handler attributes (`onload`, `onclick`, `on*`).
-- All `xlink:href` and `href` attributes whose value is not a same-document fragment (`#foo`).
-- All CSS containing `expression(...)`, `url(http*)`, or `behavior:`.
-- All `<style>` elements (we route style through nonced `<style>` in the template, not embedded in SVG).
-
-The sanitiser is allowlist-based: only a fixed set of SVG element and attribute names pass through. Everything else is dropped.
+An SVG is an executable document, and `/logo` is unauthenticated: a visitor who
+navigates to it directly gets it rendered as a document on this origin, where
+`script-src 'self'` applies to inline script that is now same-origin. Writing a
+sanitiser means betting that an allowlist covers every present and future vector
+a browser will execute. Refusing the format costs an organizer one PNG export.
 
 ---
 
@@ -131,8 +150,8 @@ In addition to CSP:
 
 - `lib/html.js` — the template + escape function.
 - `lib/router.js` — CSP and other security headers.
-- `lib/svgSanitise.js` — the SVG sanitiser.
-- `tests/html.test.js` — escape vectors including the OWASP XSS cheat sheet payloads.
+- `lib/assets.js` — the upload mime allowlist.
+- `tests/unit/html.test.js` — escape vectors.
 
 ---
 

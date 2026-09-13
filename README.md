@@ -48,7 +48,7 @@ Event Rideshare gives organizers a private, self-hosted coordination tool they c
 |---|---|
 | **Zero dependencies** | No `npm install`. Just Node >=22.5 and a single process. No build step. |
 | **Self-contained** | One Node process + one SQLite file. Nothing else to provision. |
-| **Privacy-first** | Emails stored as one-way HMAC hashes. No trackers. No third-party JS. Aggregate-only analytics with k-anonymity. |
+| **Privacy-first** | The invite allowlist is stored as one-way HMAC hashes. No trackers. No third-party JS. Aggregate-only analytics with k-anonymity. |
 | **Interactive map** | Custom slippy-map renderer (12KB vanilla JS). Pan, zoom, pinch, markers with popups. Five tile styles built in. |
 | **Portable trust** | W3C Verifiable Credentials: confirmed rides mint VCs that travel with users across events. Each deployment is a `did:web` issuer; each user is a `did:key` holder. See [TRUST.md](./TRUST.md). |
 | **One-click deploy** | Docker, Railway, Render, Fly.io, or any VPS. |
@@ -95,9 +95,14 @@ npm run dev
 ### First-run checklist
 
 1. Open `http://localhost:3000` and sign in with your admin email.
-2. Go to `/admin/allowlist` and upload your attendee CSV.
+2. Go to `/admin/allowlist` and upload your attendee CSV — or, without a browser,
+   `npm run allowlist:import -- attendees.csv`.
 3. Customize your event at `/admin/config` (or edit `event.config.yaml`).
 4. Share the URL with attendees.
+
+Want to try the whole flow first? `node scripts/seed-demo.js --yes` populates
+the app with fake attendees, rides, and claims for a dry run — it refuses to
+touch a database that already has real signups.
 
 ### Requirements
 
@@ -165,7 +170,15 @@ fly deploy
 <details>
 <summary><strong>Configuration</strong> -- event name, dates, airports, brand, map style</summary>
 
-All event configuration lives in **`event.config.yaml`** at the project root. Edit it once before deploy, or change most fields live via `/admin/config` without restarting. JSON is also accepted (`event.config.json`).
+All event configuration lives in **`event.config.yaml`** at the project root. Copy it from the tracked template first:
+
+```bash
+cp event.config.example.yaml event.config.yaml
+```
+
+Your copy is gitignored, so a pull never conflicts with your event's settings. Without it the app boots from the example and says so on every start. Edit it once before deploy, or change most fields live via `/admin/config` without restarting. JSON is also accepted (`event.config.json`).
+
+The file is checked at boot: an unknown key, a missing required field, a reversed date range or an out-of-range coordinate stops the process and prints every problem with its path, instead of surfacing as a broken page later.
 
 <details>
 <summary><strong>Full example configuration</strong></summary>
@@ -261,6 +274,7 @@ The CSV is never written to disk. Each email is normalized (lowercase, trimmed, 
 | `EMAIL_FROM` | Yes | | RFC 5322 sender, e.g. `"Rideshare <noreply@x.com>"` |
 | `RESEND_API_KEY` | One of | | [Resend](https://resend.com) API key (recommended) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | One of | | Bring-your-own SMTP |
+| `SMTP_ALLOW_PLAINTEXT` | No | `false` | Waives the STARTTLS requirement. Local no-TLS relays only |
 | `PORT` | | `3000` | HTTP port |
 | `DATABASE_PATH` | | `./data/app.db` | SQLite file path |
 | `TRUST_PROXY` | | `false` | Set `true` behind a reverse proxy |
@@ -275,10 +289,14 @@ The CSV is never written to disk. Each email is normalized (lowercase, trimmed, 
 ### Backups
 
 ```bash
-sqlite3 ./data/app.db ".backup ./data/app.db.bak"
+npm run backup
 ```
 
-Also back up WAL files (`app.db-wal`, `app.db-shm`) if the server is running.
+Takes a consistent snapshot with SQLite's `VACUUM INTO` while the server keeps
+serving, verifies it with `PRAGMA integrity_check`, and prunes snapshots past
+`RETENTION_DAYS` (default 30). No `sqlite3` binary needed, and no separate WAL
+copy -- the snapshot already folds the WAL in. See
+[RUNBOOK.md](RUNBOOK.md#backup-procedure) for restore and cadence.
 
 ### Wiping after the event
 
@@ -296,7 +314,7 @@ Pull the latest source, restart the process. Schema migrations are forward-compa
 ```
 .
 ├── server.js                 # HTTP server, graceful shutdown
-├── event.config.yaml         # Event-specific defaults
+├── event.config.example.yaml # Event config template (copy to event.config.yaml)
 ├── lib/
 │   ├── config.js             # Env + YAML/JSON config loader
 │   ├── db.js                 # SQLite schema, migrations, queries
@@ -390,7 +408,7 @@ Security is a core design constraint, not an afterthought. See [SECURITY.md](./S
 
 **Key protections:**
 
-- **No plaintext emails.** Attendee emails are stored as one-way HMAC-SHA256 hashes. A stolen database reveals nothing.
+- **Hashed invite allowlist.** The list of who is invited is stored only as HMAC-SHA256 hashes (`ALLOWLIST_SALT`), so a stolen database does not hand over the guest list. The addresses of attendees who have actually signed in are a different matter: `users.email` and `magic_links.email` hold them in plaintext, because the app has to send mail to them. Treat the database file and every backup of it as carrying attendee addresses — see [RUNBOOK.md](./RUNBOOK.md#backup-procedure).
 - **No enumeration.** Magic-link endpoints return identical responses for on-list and off-list emails. Rate-limited per-email and per-IP.
 - **No third-party code.** Zero client-side JS libraries. No external fonts, trackers, or analytics. CSP enforced to `default-src 'self'`.
 - **Constant-time comparisons** for all secret-derived values.

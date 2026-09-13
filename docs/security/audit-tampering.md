@@ -6,17 +6,22 @@
 
 ## What we record
 
-Every privileged or state-mutating action writes one row to the `audit` table:
+Privileged and state-mutating actions write one row to the `audit_log` table:
 
 - `id` — autoincrementing.
-- `created_at` — UTC timestamp.
-- `actor_id` — session-derived attendee ID, or `null` for system actions.
-- `actor_did` — the `did:key` bound to the actor, if known.
-- `event_type` — short string, e.g. `signin.ok`, `ride.create`, `cred.issue`, `allowlist.add`, `admin.banner.set`.
-- `payload_json` — JSON blob with event-specific fields (no raw secrets, no PII beyond what's necessary).
-- `payload_hash` — SHA-256 of the canonicalised payload.
+- `created_at` — epoch milliseconds.
+- `actor_id` — user id, `null` for system actions and after the user is deleted.
+- `actor_email` — denormalised so a deleted user's actions stay attributable.
+- `action` — short string, e.g. `ride.create`, `allowlist.check`, `admin.banner.set`.
+- `detail` — free-text detail for that action.
+- `ip` — client address as the router resolved it.
 
-The schema lives in `lib/db.js`. The single writer is `audit({...})` in `lib/audit.js`. Code review forbids any other path to the table.
+There is no `payload_hash` and no `actor_did` column; the row is not hashed.
+
+The schema and the single writer, `audit({...})`, both live in `lib/db.js`. The
+writer never throws: an audit failure logs and is swallowed rather than breaking
+the action it records, which is a deliberate availability trade and means a
+missing row is possible under DB pressure.
 
 ---
 
@@ -26,8 +31,8 @@ In v0.3, the audit log is **mutable for an insider with DB write access**. We ac
 
 What protects it today:
 
-1. **Filesystem permissions.** `events.db` is mode `600`, owned by the `rideshare` service user. Only that user (and root) can write.
-2. **`BEFORE UPDATE` and `BEFORE DELETE` triggers** on the `audit` table that `RAISE(ABORT, ...)`. An application path that tries to UPDATE or DELETE an audit row fails. This blocks accidental modification by a future buggy handler; it does NOT stop an attacker who can run arbitrary SQLite commands (they can `DROP TRIGGER` first).
+1. **Filesystem permissions.** The database file (`DATABASE_PATH`, default `data/app.db`) is owned by the service user; in the shipped container that is the unprivileged `app` user.
+2. **`BEFORE UPDATE` and `BEFORE DELETE` triggers** on `audit_log` that `RAISE(ABORT, 'audit_log is append-only')` (`lib/db.js`, covered by `tests/unit/audit-append-only.test.js`). The UPDATE trigger is scoped to the content columns so that deleting a user can still NULL out `actor_id` through the foreign key. This blocks accidental modification by a future buggy handler; it does NOT stop an attacker who can run arbitrary SQLite commands (they can `DROP TRIGGER` first).
 3. **The audit table appends only via the central helper.** Code review checks for direct SQL against the table.
 4. **Hourly backups.** A tampering window is bounded to the last hour, assuming backups go off-host to write-once storage.
 
@@ -52,7 +57,7 @@ On every insert, the writer computes `row_hash` from `prev_hash` and the row's c
 
 ### Verifier tool
 
-`bin/audit-verify.js` walks the table and reports:
+A verifier — not yet written — would walk the table and report:
 
 - `ok` — every row's `row_hash` matches the recomputed hash.
 - `break at row N` — the modified row plus the upstream/downstream context.
@@ -89,10 +94,8 @@ This won't ship until v0.4 / v0.5. Documented now so the design is fixed.
 
 ## Where to look
 
-- `lib/audit.js` — the central writer.
-- `lib/db.js` — the table definition and triggers.
-- `routes/admin/audit.js` — admin viewer; read-only.
-- `bin/audit-verify.js` — once shipped, the chain verifier.
+- `lib/db.js` — the table definition, the append-only triggers, and `audit()`, the central writer.
+- `routes/admin.js` — the `/admin/audit` viewer; read-only.
 
 ---
 

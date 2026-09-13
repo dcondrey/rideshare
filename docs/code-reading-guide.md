@@ -22,9 +22,13 @@ The file is short on purpose — under 100 lines. Anything bigger lives in `lib/
 
 **The three security-critical lines:**
 
-- The `createSecureContext` / TLS-disable check that refuses to bind to a non-loopback interface unless `TRUST_X_FORWARDED_FOR=1` is set, so a misconfigured deployment doesn't accept plaintext from the public internet.
-- The integrity check that derives the public key from `secrets/deployment.key` and compares to `public/.well-known/did.json`. A mismatch refuses to start, preventing a swapped key from issuing forged credentials.
-- The `process.on('unhandledRejection', ...)` handler that exits non-zero so systemd restarts and we don't silently lose state machinery.
+- The `process.on('unhandledRejection', ...)` handler that exits non-zero so the supervisor restarts rather than serving from unknown state.
+- `shutdown()`, which drains the HTTP server and then closes SQLite — the close is what checkpoints the WAL file back into the database.
+- TLS termination is **not** here. The server speaks plaintext HTTP and expects a reverse proxy in front; `TRUST_PROXY` decides whether `X-Forwarded-*` is believed.
+
+The deployment key's integrity check lives in `lib/keys.js`, not here: a key file
+that does not match the public key recorded in `deployment_identity` refuses to
+load, so a swapped key cannot issue credentials that peers will reject.
 
 ---
 
@@ -72,9 +76,9 @@ Calls into `lib/did.js`, `lib/vc.js`, and `lib/keys.js` for the primitives. This
 
 **The three security-critical lines:**
 
-- The `did:web` resolver call site, which routes through the hardened fetch in `lib/safeFetch.js` (IP allowlist, no redirects, body cap). See [`docs/security/ssrf.md`](security/ssrf.md).
-- The `iss` (issuer DID) check against the `TRUST_PEERS` env-derived allowlist. A credential whose issuer isn't allowlisted is rejected before signature verification — defense in depth.
-- The signature verification call (`verifyJws`) via `crypto.subtle.verify` with the algorithm pinned to Ed25519. No algorithm-confusion possible.
+- The `did:web` resolver call site, which routes through the hardened fetch in `lib/safe-fetch.js` (public-IP-only, no redirects, body cap). See [`docs/security/ssrf.md`](security/ssrf.md).
+- The issuer check in `importCredential` (`lib/trust.js`): only a `did:web` issuer is accepted, and never this deployment's own DID. A `did:key` resolves from the DID string itself, so accepting one would let any user self-issue their own trust score. There is no `TRUST_PEERS` allowlist in this codebase.
+- The signature verification call, `ed25519Verify` via `node:crypto` with the algorithm pinned to Ed25519. No algorithm-confusion possible.
 
 ---
 
@@ -107,32 +111,33 @@ All four require an authenticated session. The verifier playground is the most i
 | Sessions | `lib/auth.js` |
 | Magic links | `lib/auth.js` |
 | Allowlist (HMAC) | `lib/allowlist.js` |
-| Rate limiting | `lib/rate.js` |
-| Audit log | `lib/audit.js` |
+| Rate limiting | `lib/rate-limit.js` |
+| Audit log | `lib/db.js` (`audit()`) |
 | SQLite schema + queries | `lib/db.js` |
 | HTML templating + escaping | `lib/html.js` |
 | Input validation | `lib/validate.js` |
 | Logging | `lib/log.js` |
-| Hardened HTTP fetch (SSRF defense) | `lib/safeFetch.js` |
-| Ed25519 keygen / sign / verify | `lib/keys.js` |
+| Hardened HTTP fetch (SSRF defense) | `lib/safe-fetch.js` |
+| Ed25519 keygen / sign / verify | `lib/did.js` |
+| Deployment key custody | `lib/keys.js` |
 | `did:key` & `did:web` resolution | `lib/did.js` |
 | W3C VC issue / parse / verify | `lib/vc.js` |
 | Trust policy orchestration | `lib/trust.js` |
-| Slippy-map renderer | `public/js/map.js` |
-| Tile fetch / proxy | `lib/tiles.js` |
-| YAML config loader | `lib/config.js` |
+| Slippy-map renderer | `public/map.js` |
+| Tile URLs (fetched by the browser) | `lib/map-styles.js` |
+| YAML config loader | `lib/config.js` (parser in `lib/yaml.js`) |
 | Static asset serving | `routes/static.js` |
 | `/.well-known/did.json` | `routes/well-known.js` |
 | `/.well-known/security.txt` | served via the same handler (file lives at `public/.well-known/security.txt`) |
 | `/health` | `routes/health.js` |
 | Sign-in UI & flow | `routes/auth.js` |
-| Profile & contact info | `routes/profile.js` |
+| Profile & contact info | `routes/auth.js` |
 | Rides (post / claim / cancel) | `routes/rides.js` |
-| Meetups | `routes/meetups.js` |
+| Meetups | `lib/meetups.js`, admin UI in `routes/admin.js` |
 | `/trust` dashboard, verifier | `routes/trust.js` |
 | Admin (allowlist, banner, wipe) | `routes/admin.js` |
-| Admin insights | `routes/admin/insights.js` |
-| Admin audit viewer | `routes/admin/audit.js` |
+| Admin insights | `lib/insights.js`, UI in `routes/admin.js` |
+| Admin audit viewer | `routes/admin.js` (`/admin/audit`) |
 
 ---
 
@@ -142,8 +147,8 @@ After the five files above, in this order:
 
 6. `lib/html.js` — see how `html\`\`` auto-escapes and how `raw()` works. Any deviation from this template is a XSS risk.
 7. `lib/db.js` — schema definitions. Read the table definitions; everything else is parameterised wrappers.
-8. `lib/audit.js` — what we record and how. Plus the (currently unimplemented) hash chain hook.
-9. `lib/safeFetch.js` — the SSRF defense at the network boundary.
+8. `lib/db.js`'s `audit()` — what we record, and the append-only triggers beside it.
+9. `lib/safe-fetch.js` — the SSRF defense at the network boundary.
 10. `routes/auth.js` — the request-shape view of the magic-link flow you read in `lib/auth.js`.
 
 After those, you've seen every security-critical control and have enough context to navigate the rest by `find` and `grep`.

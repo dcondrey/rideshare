@@ -67,7 +67,7 @@ Before responding, regardless of allowlist outcome.
 
 The delay is sampled from a uniform distribution over [200ms, 600ms]. The endpoint's real work (HMAC + DB lookup + magic-link generation + email enqueue) takes O(10ms) at the tail. The added delay dominates.
 
-**This is a probabilistic defense**, not a guarantee. A determined attacker who collects N requests can reduce the noise. Our backstop is the per-IP rate limit (5 requests / 5 minutes) and per-email rate limit (3 requests / hour). At those rates, recovering an enumeration signal would require months of probing per email — long enough that the event is over, the deployment is wiped, and the allowlist no longer exists.
+**This is a probabilistic defense**, not a guarantee. A determined attacker who collects N requests can reduce the noise. Our backstop is the per-IP rate limit (30 requests / hour) and per-email rate limit (5 requests / hour, `MAGIC_LINK_RATE_LIMIT`). At those rates, recovering an enumeration signal would require months of probing per email — long enough that the event is over, the deployment is wiped, and the allowlist no longer exists.
 
 For the magic-link consumption endpoint, the delay is smaller (50-150ms) because the work is more uniform and the threat is replay (which is defended by the single-use property and 10-minute TTL) rather than enumeration.
 
@@ -75,12 +75,14 @@ For the magic-link consumption endpoint, the delay is smaller (50-150ms) because
 
 ## Rate limits
 
-`lib/rate.js` implements a token-bucket per key. Keys used:
+`lib/rate-limit.js` implements a fixed-window counter per key, in memory, reset
+by a process restart. Keys actually in use:
 
-- `signin:ip:<addr>` — 5 / 5 minutes.
-- `signin:email:<hmac>` — 3 / hour.
-- `link:ip:<addr>` — 20 / minute (so a legitimate burst from a public Wi-Fi exit IP isn't rate-limited).
-- `verify:ip:<addr>` — 30 / minute on `/trust/verify`.
+- `magic:email:<address>` — `MAGIC_LINK_RATE_LIMIT` (default 5) / hour, in `lib/auth.js`.
+- `magic:ip:<addr>` — 30 / hour, in `lib/auth.js`.
+- `admincheck:<user id>` — 30 / hour on the admin allowlist lookup, in `routes/admin.js`.
+
+`POST /trust/verify` is **not** rate-limited today.
 
 Exceeding the limit returns a `429` after the same artificial delay as a normal response. The response shape doesn't reveal which limit triggered.
 
@@ -99,8 +101,10 @@ Exceeding the limit returns a `429` after the same artificial delay as a normal 
 
 - `lib/auth.js` — the sign-in handler, the link consumption handler, the artificial delay.
 - `lib/allowlist.js` — the HMAC-then-`timingSafeEqual` flow.
-- `lib/rate.js` — the limiter.
-- `tests/auth.test.js` — includes a statistical test that the in-vs-out-of-allowlist response time distributions overlap within a tolerance.
+- `lib/rate-limit.js` — the limiter.
+- `tests/unit/rate-limit.test.js` — window and boundary behaviour. There is no
+  statistical timing test: the constant-time comparison and the artificial delay
+  are verified by reading, not by measurement.
 
 ---
 

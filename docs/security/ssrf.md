@@ -2,12 +2,20 @@
 
 > How **rideshare** prevents server-side request forgery, especially via `did:web` resolution. Audience: reviewers checking the egress fetch boundary.
 
-The server makes outbound HTTP requests in only two cases:
+The server makes one kind of outbound HTTP request whose destination is
+influenced by user input: **`did:web` resolution** for verifying Verifiable
+Credentials issued by peer deployments. It goes through `lib/safe-fetch.js`,
+whose policies this document describes.
 
-1. **`did:web` resolution** for verifying Verifiable Credentials issued by peer deployments.
-2. **Tile fetches** when the operator has not configured a self-hosted tile source.
+Map tiles are **not** in this boundary. The browser fetches them directly from
+the provider named in `event.config.yaml` (`public/map.js` builds the URL); the
+server never requests a tile, so there is no tile egress to police.
 
-Both go through `lib/safeFetch.js`. This document describes that wrapper's policies. Direct `fetch(...)` calls in route handlers are forbidden by code review.
+The one other outbound request the server makes is to the Resend API
+(`lib/email.js`), a fixed host with an operator-supplied API key. It is not
+user-influenced and deliberately does not use the wrapper, which strips
+authorization headers by design. Any *new* fetch whose URL is derived from
+request data must use `lib/safe-fetch.js`.
 
 ---
 
@@ -26,7 +34,7 @@ For our app, the user-controlled URL comes most plausibly from a `did:web` ident
 
 ---
 
-## `lib/safeFetch.js` — the policies
+## `lib/safe-fetch.js` — the policies
 
 Every outbound request is built and validated as follows:
 
@@ -53,11 +61,11 @@ The lookup happens **before** the connection. Then we connect to that specific I
 
 ### 3. Redirect refusal
 
-`fetch(..., { redirect: 'error' })`. Any 3xx response causes the request to fail. A redirect-based bypass (server returns `Location: http://169.254.169.254/...`) cannot get us back into private space.
+Redirects are never followed; any 3xx response causes the request to fail. A redirect-based bypass (server returns `Location: http://169.254.169.254/...`) cannot get us back into private space.
 
 ### 4. Body size cap
 
-`16 * 1024` bytes by default for `did:web` responses. Configurable per call. The wrapper consumes the response stream, counting bytes; on overflow it aborts the fetch and throws.
+`16 * 1024` bytes by default; configurable per call, and `did:web` resolution passes 64KB. The wrapper consumes the response stream, counting bytes; on overflow it destroys the socket and throws. A `Content-Length` larger than the cap is refused before any body is read.
 
 ### 5. Timeout
 
@@ -69,11 +77,11 @@ A small in-memory map limits concurrent requests to the same host (default 2). A
 
 ### 7. Header hygiene
 
-Outbound requests carry only `Accept`, `User-Agent`, and `Accept-Language`. No cookies, no auth headers, no custom headers from the user. The `User-Agent` identifies us so peer operators can rate-limit us if they want (`rideshare/0.3 (+https://example.com/rideshare)`).
+Outbound requests carry only `Accept`, `User-Agent`, and `Accept-Language`. No cookies, no auth headers, no custom headers from the user — the wrapper has no parameter that could add one. The `User-Agent` identifies us so peer operators can rate-limit us if they want.
 
 ### 8. Response content-type check
 
-`did:web` responses must have `Content-Type: application/json` (or `application/did+json`). Tile responses must be `image/*`. Anything else fails the call.
+`did:web` responses must have `Content-Type: application/json` (or `application/did+json`). Anything else fails the call. The check is a per-call option: a caller that passes none accepts any type.
 
 ---
 
@@ -103,19 +111,20 @@ Special-case for the resolution path:
 
 ---
 
-## Tile fetch flow
+## Tile fetches are the browser's, not ours
 
-Configurable. Default is `disabled` (the deployment requires the operator to either provide `TILE_PROXY_URL` or accept that tile fetches go straight to a third party at request time).
-
-If enabled, the same `safeFetch` policies apply. The tile URL template is locked to one of the supported provider patterns; the user cannot inject an arbitrary URL.
-
-We strongly recommend self-hosting via MBTiles. `lib/tiles.js` includes an MBTiles reader that bypasses egress entirely.
+The tile URL template comes from `event.config.yaml`, is rendered into the page
+by `routes/map.js`, and is requested by the visitor's browser. Tiles therefore
+raise a privacy question (the provider sees attendee IP addresses) rather than
+an SSRF one, and an operator who wants to avoid that self-hosts a tile server
+and points the template at it. There is no server-side tile fetch and no tile
+proxy in this codebase.
 
 ---
 
 ## What's still possible
 
-- A peer deployment we trust (`TRUST_PEERS`) that becomes malicious can return arbitrary 16KB JSON and we'll process it. Mitigation: JSON parser is the standard library; resulting object is type-checked before use; any field we don't expect is ignored.
+- A peer deployment we trust (`TRUST_PEERS`) that becomes malicious can return arbitrary JSON up to the cap and we'll process it. Mitigation: JSON parser is the standard library; resulting object is type-checked before use; any field we don't expect is ignored.
 - A peer's hostname could resolve to a public IP that they then point at a vulnerable third-party host. The third party would receive our request, but: we send no auth headers and no cookies, so the request is equivalent to any unauthenticated GET from the internet. Low blast-radius.
 - A peer's TLS cert is forged by a rogue CA. Out of scope per [`THREAT_MODEL.md`](../../THREAT_MODEL.md) residual risks.
 
@@ -125,16 +134,26 @@ We strongly recommend self-hosting via MBTiles. `lib/tiles.js` includes an MBTil
 
 - We do not implement DNSSEC validation. The OS resolver is trusted.
 - We do not pin the peer's TLS cert. `did:web` is meant to be operator-rotatable; pinning would defeat that. Trust is anchored in the published `did.json` content, not in TLS material beyond standard CA chain validation.
-- We do not maintain a cache of peer DID documents beyond a 5-minute TTL. Fresh resolution per verification keeps revocation latency tight; the rate-limit and concurrency cap prevent it from being a DoS amplifier.
+- We do not cache peer DID documents at all. Fresh resolution per verification keeps revocation latency tight; the concurrency cap is what keeps it from being a DoS amplifier.
 
 ---
 
 ## Where to look
 
-- `lib/safeFetch.js` — the wrapper.
-- `lib/did.js` — `resolveDidWeb` call site.
-- `lib/tiles.js` — tile fetch path, including MBTiles fast path.
-- `tests/safeFetch.test.js` — adversarial vectors (rebinding, redirect chain, oversized body, IPv4-mapped-IPv6 address aliases, etc.).
+- `lib/safe-fetch.js` — the wrapper.
+- `lib/did.js` — the `did:web` call site in `resolveDid`.
+- `tests/unit/safe-fetch.test.js` — address-space vectors (IPv4-mapped IPv6, NAT64, CGNAT, metadata, range boundaries) and the URL-level refusals.
+
+---
+
+## The one documented exception
+
+`ALLOW_INSECURE_DID_WEB=true` lets `did:web` resolution fall back to plaintext
+HTTP for `localhost` and `127.0.0.1`, bypassing the wrapper entirely, so the
+demo and tests run without TLS. It defaults to false, is never inferred from
+`NODE_ENV`, and warns at boot if it is on while `APP_URL` is https. With it on,
+an unauthenticated caller can make the server fetch arbitrary loopback ports —
+it belongs on a laptop, not on a deployment.
 
 ---
 

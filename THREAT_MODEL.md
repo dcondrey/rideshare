@@ -43,14 +43,14 @@ The system stores or handles the following assets. Each is rated by sensitivity 
 
 | # | Asset | Sensitivity | Where it lives | Recoverable on disclosure? |
 | --- | --- | --- | --- | --- |
-| A1 | Attendee email list (the allowlist) | High | `events.db` table `allowlist`, hashed | No — emails are durable identifiers |
-| A2 | Attendee out-of-band contact (Signal handle, phone, Matrix ID) | High | `events.db` table `attendees`, plaintext | No |
-| A3 | Ride metadata (origin, destination, time, pairings, notes) | Medium-High | `events.db` table `rides` | No — locations reveal home/hotel |
+| A1 | Attendee email list (the allowlist) | High | `data/app.db` table `allowlist_hashes`, hashed | No — emails are durable identifiers |
+| A2 | Attendee out-of-band contact (Signal handle, phone, Matrix ID) | High | `data/app.db` table `users`, plaintext | No |
+| A3 | Ride metadata (origin, destination, time, pairings, notes) | Medium-High | `data/app.db` table `rides` | No — locations reveal home/hotel |
 | A4 | Deployment Ed25519 signing key | Critical | `secrets/deployment.key` (file mode 0600) on the host | No — rotation invalidates issued credentials |
 | A5 | User Ed25519 signing keys (`did:key`) | Critical to the user | Browser `IndexedDB`, never sent to the server | n/a — server never sees them |
-| A6 | Audit log | High | `events.db` table `audit` | No — integrity loss is permanent |
-| A7 | Magic-link tokens (in flight) | High during their 10-min window | `events.db` table `magic_links`, then deleted on use | n/a — short-lived |
-| A8 | Session IDs | High during session lifetime | `events.db` table `sessions`, opaque random | Yes — revocable by deleting row |
+| A6 | Audit log | High | `data/app.db` table `audit_log` | No — integrity loss is permanent |
+| A7 | Magic-link tokens (in flight) | High during their 10-min window | `data/app.db` table `magic_links`, then deleted on use | n/a — short-lived |
+| A8 | Session IDs | High during session lifetime | `data/app.db` table `sessions`, opaque random | Yes — revocable by deleting row |
 | A9 | Issued Verifiable Credentials (JWS) | Public-by-design but cryptographically bound | Wherever the holder stores them | n/a — public artifacts |
 
 **Note on A1:** the allowlist is stored as `HMAC(server_secret, lower(email))`, not as plaintext. This means a host-read disclosure (insider with DB access) does not directly reveal who is invited — though a dictionary of likely emails can still be checked. See [Asset A1, Information disclosure](#a1-id).
@@ -169,7 +169,7 @@ Stored after sign-in. Free-text fields that an attendee can edit on their own pr
 #### A2, Tampering
 
 - **T-A2-T1**: Attacker modifies another attendee's contact info via a write endpoint.
-  *Mitigation:* profile-mutation endpoints check `session.attendee_id == row.attendee_id`. Tested by `tests/auth.test.js` (file paths described under "Where to read more" below — exact line numbers are filled in by the route handlers).
+  *Mitigation:* mutation endpoints take the actor from the session, never from the request body. Ride and claim ownership checks live in `lib/rides.js`; `tests/unit/ride-capacity.test.js` and `tests/e2e/full-flow.test.js` exercise them.
 
 #### A2, Repudiation
 
@@ -211,8 +211,7 @@ Origin, destination, time of departure, available seats, claimed seats, pairings
 - **T-A3-T1**: Attacker modifies a ride that is not theirs (changes destination to a trap).
   *Mitigation:* update endpoints check ownership. The audit log records who changed what.
 - **T-A3-T2**: Attacker manipulates the seat counter via concurrent requests (race) to overbook or underbook.
-  *Mitigation:* claim is wrapped in a SQLite `BEGIN IMMEDIATE` transaction; the seat counter is decremented inside the transaction; a `CHECK (claimed_seats <= total_seats)` constraint prevents overbooking even if the application logic is wrong. See [`docs/security/`] race-condition section TBD.
-  > **TODO** — open `docs/security/race-conditions.md` if/when we want a dedicated treatment.
+  *Mitigation:* every claim and decision runs inside a `BEGIN IMMEDIATE` transaction (`tx()` in `lib/db.js`), which takes the write lock before the seat count is read, and remaining capacity is checked there (`lib/rides.js`, `tests/unit/ride-capacity.test.js`). There is no `CHECK` constraint backstop in the schema: capacity is enforced by that code path alone.
 
 #### A3, Repudiation
 
@@ -250,7 +249,7 @@ This is the private key used by the deployment to issue Verifiable Credentials o
 #### A4, Tampering
 
 - **T-A4-T1**: Attacker tampers with `secrets/deployment.key` on disk.
-  *Mitigation:* file mode 0600 owned by the service user; integrity check on startup compares the public key derived from the private key to the published `did.json`. Mismatch refuses to start.
+  *Mitigation:* the key file is written mode 0600 and a wider mode warns at boot; `lib/keys.js` compares the public key derived from the file against the one recorded in `deployment_identity` when the key was first adopted, and refuses to load on a mismatch.
 
 #### A4, Repudiation
 
@@ -260,9 +259,9 @@ This is the private key used by the deployment to issue Verifiable Credentials o
 #### A4, Information disclosure
 
 - **T-A4-I1**: Key file leaked via backup.
-  *Mitigation:* `secrets/` is excluded from the SQLite-only backup procedure; if the operator chooses to back up the key, the backup MUST be encrypted (KMS or age). Documented in [`RUNBOOK.md`](RUNBOOK.md#backup-procedure).
+  *Mitigation:* the key is a file outside the database, so the SQLite-only backup (`scripts/backup.mjs`) does not copy it; that script also warns if a snapshot still carries a pre-migration key row. If the operator chooses to back the key up, the backup MUST be encrypted (KMS or age). Documented in [`RUNBOOK.md`](RUNBOOK.md#backup-procedure).
 - **T-A4-I2**: Key disclosed via log file.
-  *Mitigation:* logging library has an allowlist of fields; the key material is never accepted into a log line. Code review forbids logging anything from `lib/keys.js`.
+  *Mitigation:* `lib/log.js` writes only allowlisted field names and reports any dropped name without its value, so key material cannot reach a log line by being passed as a new field. `lib/keys.js` logs no key material at all.
 
 #### A4, DoS
 
@@ -318,7 +317,7 @@ An append-only record of privileged actions, intended to enable post-event foren
 #### A6, Tampering
 
 - **T-A6-T1**: Attacker (or insider with DB write) edits or deletes audit rows.
-  *Mitigation (current):* file-system permissions on `events.db`; audit table has a `BEFORE UPDATE` and `BEFORE DELETE` trigger that raises.
+  *Mitigation (current):* file-system permissions on the database file; `audit_log` has `BEFORE UPDATE` and `BEFORE DELETE` triggers that raise (`lib/db.js`).
   *Mitigation (planned):* hash-chain each row to the previous (`prev_hash`, `row_hash`); break detection on every read. Tracked in [`docs/security/audit-tampering.md`](docs/security/audit-tampering.md).
 
 #### A6, Repudiation
@@ -391,7 +390,9 @@ See [`docs/security/ssrf.md`](docs/security/ssrf.md) for details.
 
 - Logo upload is admin-only.
 - Server-side SVG sanitiser strips `<script>`, `<foreignObject>`, all event-handler attributes, and external references (`xlink:href`, `href` to non-`#` targets).
-- Logo is served with `Content-Type: image/svg+xml; charset=utf-8` plus `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`.
+- SVG is not an accepted logo format (`lib/assets.js` allows PNG, WebP and JPEG only), so no
+  sanitiser is required. The logo is served with `Content-Security-Policy: default-src 'none'`
+  and `X-Content-Type-Options: nosniff`.
 - Logo is rendered via `<img>`, never `<object>` or `<iframe>`, so even surviving script tags would not execute.
 
 ### CC-7: CSP bypass
@@ -420,6 +421,11 @@ See [`docs/security/ssrf.md`](docs/security/ssrf.md) for details.
 **Threat:** Attacker passes `?next=https://evil.example.com` and lures the victim into clicking a magic link that, after auth, redirects them to a phishing page.
 **Mitigation:** the `next` parameter is parsed and only the path component is preserved; scheme and host are dropped; relative paths only.
 
+### CC-11: Admin-controlled HTML in map tile attribution
+
+**Threat:** `event.config.yaml#map.customAttribution` is deliberately admin-settable HTML (operators need to credit a non-default tile provider, which usually requires a link). An admin account takeover, or a malicious value committed to `event.config.yaml`, could otherwise inject script via this field.
+**Mitigation:** the client (`public/map.js`) never assigns it through `innerHTML`. It parses the value with `DOMParser`, then walks the resulting node tree and rebuilds it into the live DOM keeping only text nodes and `<a href="http(s)://...">` elements — every other element, and every attribute on the ones kept other than `href`, is dropped, so event handlers and non-text children never reach the page. Trust boundary: this protects against the field itself being hostile; it does not need to defend against the admin who sets it, since setting it already requires the `U-admin` / `A-admin` role from the [Actors](#actors) table.
+
 ---
 
 ## In-scope vs out-of-scope
@@ -429,7 +435,7 @@ See [`docs/security/ssrf.md`](docs/security/ssrf.md) for details.
 - Authentication and authorization bypass.
 - Credential forgery and replay.
 - XSS, CSP bypass.
-- CSRF (defense via SameSite cookies and origin checks).
+- CSRF (defense via SameSite cookies, `form-action 'self'`, and a signed double-submit token on `/admin` writes; there is no `Origin` header check).
 - SSRF via `did:web`.
 - Audit log tampering (with the caveat that the current mitigation is acknowledged-incomplete).
 - Allowlist enumeration.
@@ -477,7 +483,7 @@ The threat model relies on these assumptions. If any is violated, the analysis a
 3. **Node `crypto` is correct.** `crypto.randomBytes`, `crypto.timingSafeEqual`, `crypto.createHmac`, and the WebCrypto Ed25519 path return what they claim.
 4. **The email provider does not actively forge messages from us.** A passive observer of provider infrastructure is in scope (CC-3); an active forger is treated as a compromised host of the provider — out of scope.
 5. **DNS for `did:web` resolution is honest** at the resolver level. We do not implement DNSSEC verification in the resolver.
-6. **Operators do not commit secrets to the repo.** `.env`, `secrets/`, and `events.db` are gitignored and CI scans for accidental adds.
+6. **Operators do not commit secrets to the repo.** `.env`, `secrets/`, and `data/` are gitignored.
 7. **Deployment hostname is unique per event.** We do not support a single hostname serving multiple events; the threat model assumes one-host-one-event.
 8. **Browser implements CSP correctly.** Attacks against the browser's CSP enforcement are out of scope (CC-7's mitigations rely on the browser doing its job).
 9. **The deployment is not behind a corporate proxy that strips security headers.** If it is, the CSP mitigation is degraded and the operator should add the headers at the upstream proxy too.
