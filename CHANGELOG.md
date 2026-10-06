@@ -12,6 +12,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Document key custody, the new controls and the operator procedures
 - Update changelog [skip ci]
 - Update changelog [skip ci]
