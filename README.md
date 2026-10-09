@@ -53,6 +53,11 @@ shared rides, so you can walk the whole flow alone:
 4. **Verify it.** Paste it into the verifier at `/trust/verify`, or into any
    VC-JWT tool that resolves `did:web`.
 
+Then the tour's "Go further" steps: reveal only some claims from the SD-JWT VC
+copy, send the credential to a wallet over OpenID4VCI, verify someone over
+OpenID4VP from `/verify`, and ping another event's DIDComm agent from
+`/trust/didcomm`.
+
 **Run the demo locally** (uses its own database file, so it can't touch real data):
 
 ```bash
@@ -200,7 +205,7 @@ payload). Its issuer key no longer exists, so it is for reading, not verifying:
 | Securing | VC-JWT, EdDSA ([RFC 8032](https://www.rfc-editor.org/rfc/rfc8032)) | **Deviation:** VC-JWT 1.1 shape, with the credential in a `vc` claim next to `iss`/`sub`/`nbf`/`jti`, while the header says `typ: vc+jwt`, the [VC-JOSE-COSE](https://www.w3.org/TR/vc-jose-cose/) media type, whose payload is the bare credential. A strict VC-JOSE-COSE verifier will see that mismatch; it has to read the `vc` claim to accept these |
 | Signatures | Ed25519, ES256 | Node's built-in `crypto`, verified against RFC 8032 test vectors. ES256 (P-256) signs SD-JWT VCs |
 | Issuance to wallets | [OpenID4VCI 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) | Pre-authorized code flow with a PIN, nonce endpoint, `jwt` proofs (ES256 or Ed25519), format `dc+sd-jwt`. Not implemented: authorization code flow, DPoP, key attestations, deferred issuance, so not HAIP |
-| Messaging | [DIDComm v2.1](https://identity.foundation/didcomm-messaging/spec/v2.1/) | Authcrypt (`ECDH-1PU+A256KW`) and anoncrypt (`ECDH-ES+A256KW`) with `A256CBC-HS512` over X25519; Trust Ping 2.0 and Discover Features 2.0 between deployments. Checked against the spec vector and against didcomm-rust (packing both ways, and a live agent round trip). Not implemented: signed (JWS) messages, mediators and forward routing, `A256GCM`/`XC20P` |
+| Messaging | [DIDComm v2.1](https://identity.foundation/didcomm-messaging/spec/v2.1/) | Authcrypt (`ECDH-1PU+A256KW`) and anoncrypt (`ECDH-ES+A256KW`) with `A256CBC-HS512` over X25519; Trust Ping 2.0 and Discover Features 2.0 between deployments. Checked against the spec vector and against didcomm-rust (packing both ways, and a live agent round trip). Anoncrypt also accepts `A256GCM` and `XC20P` (XChaCha20 via a hand-written HChaCha20, checked against the draft's vector), so didcomm-rust's default works. Not implemented: signed (JWS) messages, mediators and forward routing |
 | Presentation | [OpenID4VP 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) | `decentralized_identifier` client id with an ES256-signed request object by reference, DCQL, `direct_post`, `dc+sd-jwt` with key binding. Not implemented: `x509_hash`, `direct_post.jwt`, the Digital Credentials API |
 | Selective disclosure | [SD-JWT, RFC 9901](https://www.rfc-editor.org/rfc/rfc9901) + [SD-JWT VC draft-19](https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/) | Followed. Every ride credential is also issued as a `dc+sd-jwt` bound to the holder's `did:key` via `cnf.jwk`; the holder picks claims on `/trust` and signs a KB-JWT with a verifier nonce. Tested against the RFC's own digest vectors. Issuer keys at `/.well-known/jwt-vc-issuer`; `x5c` chains are not supported |
 
@@ -258,9 +263,19 @@ agent: an X25519 `keyAgreement` key and a `DIDCommMessaging` service at
 `/didcomm` in its DID document. On `/trust/didcomm` you can send a Trust Ping or
 a Discover Features query to any deployment's DID and watch the authenticated
 reply arrive; pinging the deployment's own DID shows the whole round trip on
-one server. Messages are authcrypt (`ECDH-1PU+A256KW`, `A256CBC-HS512`), built
-on `node:crypto` alone, and interoperate with didcomm-rust, the engine of
-[@writerslogic/didcomm-ts](https://github.com/writerslogic/didcomm-ts).
+one server. Messages are authcrypt (`ECDH-1PU+A256KW`, `A256CBC-HS512`); inbound
+anoncrypt may use any of the three content algorithms the spec lists. All of
+it is built on `node:crypto` alone and interoperates with didcomm-rust, the
+engine of [@writerslogic/didcomm-ts](https://github.com/writerslogic/didcomm-ts):
+envelopes in every mode and algorithm, both directions, plus a live agent
+round trip over HTTP. To rerun those checks:
+
+```bash
+npm i --no-save --no-package-lock didcomm@0.4.1
+node tests/interop/didcomm-rust.mjs
+# with a server running under ALLOW_INSECURE_DID_WEB=true:
+RIDESHARE=http://localhost:3000 node tests/interop/didcomm-rust-agent.mjs
+```
 
 ### Selective disclosure
 
@@ -276,9 +291,16 @@ same). Replaying a presentation fails on the spent nonce.
 
 **Not implemented (yet):** status lists or any revocation, BBS proofs, Data
 Integrity proofs, DIDComm credential exchange (issue-credential 3.0 and
-present-proof 3.0 define no SD-JWT format), and HAIP conformance. Credentials carry no `exp`, and a deployment
+present-proof 3.0 define no SD-JWT format), DIDComm signed messages and
+mediators, and HAIP conformance. **No real wallet app has been tested yet**:
+the OpenID4VCI and OpenID4VP flows are verified with scripted wallets against
+the live demo, and the OpenID Foundation conformance suite is the next check.
+Wallets that don't support the `decentralized_identifier` client id prefix
+can't answer `/verify` requests. Credentials carry no `exp`, and a deployment
 publishes a single Ed25519 key, so rotating it makes every earlier VC-JWT
-unverifiable. The
+unverifiable. On the free-plan live demo all keys regenerate whenever it
+wakes, so credentials and DIDComm peers from earlier sessions stop verifying.
+The
 [TRUST.md](./TRUST.md) roadmap covers counter-signed credentials (the
 counterpart co-signs with their `did:key`, so the event alone can't fabricate
 a ride), BBS+ proofs and status lists. If you are testing interop at an event
@@ -611,7 +633,15 @@ Pull the latest source, restart the process. Schema migrations are forward-compa
 │   ├── trust.js              # DID binding, ride confirmation, VC issuance + import
 │   ├── vc.js                 # VC-JWT signing and verification
 │   ├── did.js                # did:key / did:web encoding, resolution, Ed25519
-│   ├── keys.js               # Issuer key custody outside the database
+│   ├── keys.js               # Ed25519, ES256 and X25519 key custody outside the database
+│   ├── jose.js               # Compact JWS (ES256, Ed25519) and JWK import
+│   ├── sd-jwt.js             # SD-JWT / SD-JWT VC issue, present, verify (RFC 9901)
+│   ├── verifier.js           # Verifier nonces and SD-JWT VC issuer-key resolution
+│   ├── oid4vci.js            # OpenID4VCI 1.0 issuer, pre-authorized code flow
+│   ├── oid4vp.js             # OpenID4VP 1.0 verifier and in-app holder
+│   ├── didcomm-crypto.js     # DIDComm v2.1 authcrypt/anoncrypt envelopes
+│   ├── didcomm.js            # DIDComm agent: trust ping, discover features
+│   ├── qr.js                 # QR encoder for wallet offers and requests
 │   ├── safe-fetch.js         # SSRF-hardened outbound fetch for did:web
 │   ├── crypto.js             # HMAC, constant-time compare, tokens, email normalization
 │   ├── demo.js               # Synthetic attendees and live-demo behavior
@@ -635,7 +665,10 @@ Pull the latest source, restart the process. Schema migrations are forward-compa
 │   ├── rides.js              # Browse, create, claim, manage
 │   ├── admin.js              # Dashboard, allowlist, config, audit
 │   ├── map.js                # Interactive map
-│   ├── trust.js              # DID binding, credentials, verifier
+│   ├── trust.js              # DID binding, credentials, verifier, selective disclosure
+│   ├── oid4vci.js            # Issuer metadata, offer, token, nonce, credential
+│   ├── oid4vp.js             # /verify, request object, direct_post response
+│   ├── didcomm.js            # /didcomm endpoint and /trust/didcomm page
 │   ├── well-known.js         # /.well-known/did.json
 │   ├── health.js             # /health
 │   └── static.js             # CSS, JS, images
@@ -649,7 +682,7 @@ Pull the latest source, restart the process. Schema migrations are forward-compa
 │   ├── favicon.svg
 │   └── robots.txt
 ├── scripts/                  # Backup, allowlist import, demo seeding, CI gates
-├── tests/                    # Unit, e2e and RFC 8032 / base58 vectors (node --test)
+├── tests/                    # Unit, e2e, spec vectors; interop/ checks against didcomm-rust
 ├── docs/
 │   ├── screenshots/
 │   ├── code-reading-guide.md
@@ -685,7 +718,7 @@ This is a deliberate architectural choice, not a stunt.
 - **Instant deploy.** Docker image builds in seconds. CI runs in seconds. Cold starts are instant.
 - **Auditability.** Every line of code is in this repo. Reviewers can read it all in an afternoon.
 
-The tradeoffs are real (hand-rolled SMTP client, custom YAML parser, custom map renderer) but intentional. Each is <300 lines, tested, and does exactly what this app needs.
+The tradeoffs are real (hand-rolled SMTP client, YAML parser, map renderer, QR encoder, SD-JWT, OpenID4VC and DIDComm) but intentional. Each is tested against an independent reference where one exists: RFC 8032 and RFC 9901 vectors, the DIDComm spec vector and didcomm-rust, python-qrcode matrices, and the XChaCha draft vector.
 
 ---
 

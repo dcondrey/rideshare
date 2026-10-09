@@ -88,7 +88,9 @@
   function TinyMap(container, opts) {
     this.container = container;
     this.tile = opts.tile;
-    this.minZoom = 1;
+    // Country level at most: an event map has no use for whole-continent views,
+    // and stopping here keeps the world from tiling into a strip of repeats.
+    this.minZoom = Math.max(5, opts.tile.minZoom || 0);
     this.maxZoom = opts.tile.maxZoom || 19;
     this.zoom = clamp(opts.zoom || 11, this.minZoom, this.maxZoom);
     this.center = opts.center || { lat: 0, lng: 0 };
