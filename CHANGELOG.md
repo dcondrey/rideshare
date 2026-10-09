@@ -19,6 +19,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Show the selective disclosure, OpenID4VC and DIDComm flows
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
