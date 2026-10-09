@@ -237,6 +237,20 @@ verifier's DID document before the browser sends exactly the requested claims.
 HAIP's `x509_hash` client identifiers and encrypted `direct_post.jwt`
 responses are not implemented.
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/selective-disclosure.png" alt="Choosing which SD-JWT VC claims to disclose"></td>
+    <td width="50%"><img src="docs/screenshots/sd-jwt-verified.png" alt="Verifier report for a selectively disclosed, key-bound SD-JWT VC"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/oid4vci-offer.png" alt="OpenID4VCI credential offer QR code with a 6-digit PIN"></td>
+    <td><img src="docs/screenshots/oid4vp-verified.png" alt="OpenID4VP verifier page after a wallet presented event.name and role"></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/didcomm.png" alt="DIDComm agent page with a trust ping and ping-response round trip"></td>
+  </tr>
+</table>
+
 ### Talk to other events (DIDComm)
 
 Each deployment's `did:web` is also a [DIDComm v2.1](https://identity.foundation/didcomm-messaging/spec/v2.1/)
