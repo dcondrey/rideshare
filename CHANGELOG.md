@@ -36,6 +36,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
+- Update changelog [skip ci]
 - Tighten every guide, add README badges, correct claims that drifted from the code
 - Update changelog [skip ci]
 - Update changelog [skip ci]
@@ -83,6 +84,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Satisfy Biome CI (no assignment in expression, no comma operator)
 - Stop sharing location as soon as the page is closed
 - Rate-limit ride posts and claims, harden code-scanning findings, one trip per demo ghost
 - Keep OpenID4VP results private and requests alive, drop the regex matcher
