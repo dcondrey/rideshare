@@ -350,7 +350,8 @@
   const liveHandlers = {};
   window.rideshareLive = {
     on(type, fn) {
-      (liveHandlers[type] ||= []).push(fn);
+      if (!liveHandlers[type]) liveHandlers[type] = [];
+      liveHandlers[type].push(fn);
     },
   };
   es.addEventListener("ghosts", (e) => {

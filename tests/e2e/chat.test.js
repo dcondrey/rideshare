@@ -69,7 +69,13 @@ describe("chat and direct messages", () => {
         }
       })
       .catch(() => {});
-    return { stop: async () => (ac.abort(), await done, text) };
+    return {
+      stop: async () => {
+        ac.abort();
+        await done;
+        return text;
+      },
+    };
   }
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
