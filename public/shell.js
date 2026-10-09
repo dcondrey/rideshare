@@ -335,10 +335,11 @@
       })
       .catch(() => {});
 
-  function post(path, body) {
+  function post(path, body, keepalive = false) {
     return fetch(path, {
       method: "POST",
       credentials: "same-origin",
+      keepalive,
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : "{}",
     });
@@ -367,17 +368,22 @@
     keepAwake();
   }
 
-  function stop() {
+  function stop(keepalive = false) {
     if (watch !== null) navigator.geolocation.clearWatch(watch);
     watch = null;
     lock?.release().catch(() => {});
     lock = null;
     btn.setAttribute("aria-pressed", "false");
     label.textContent = "Share my location";
-    post("/live/stop");
+    post("/live/stop", null, keepalive);
   }
 
   btn.addEventListener("click", () => (watch === null ? start() : stop()));
+  // Closing or leaving the page ends sharing at once, rather than leaving the
+  // last point on partners' maps until it expires.
+  window.addEventListener("pagehide", () => {
+    if (watch !== null) stop(true);
+  });
   // The wake lock drops whenever the tab is hidden; take it back on return.
   document.addEventListener("visibilitychange", () => {
     if (watch !== null && document.visibilityState === "visible") keepAwake();
