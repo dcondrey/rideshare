@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Hotel room sharing behind a config flag, with request-then-reveal and safety guidance
 - Meetings with a time, a spot picked on the map, RSVPs and private notes
 - Attendee chat room and direct messages with blocking, reports and organizer moderation
 - Opt-in attendee directory and profiles, a More menu, and demo visitors kept apart
@@ -28,6 +29,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
