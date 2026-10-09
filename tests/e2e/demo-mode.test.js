@@ -68,7 +68,7 @@ describe("live demo (DEMO_MODE=true)", () => {
     const a = await signIn("attendee@demo.test");
     const b = await signIn("attendee@demo.test");
     assert.equal(a.res.status, 303);
-    assert.equal(a.res.headers.get("location"), "/demo");
+    assert.equal(a.res.headers.get("location"), "/?panel=%2Fdemo");
     assert.notEqual(await currentUserId(a.client), await currentUserId(b.client));
   });
 
@@ -154,7 +154,7 @@ describe("live demo (DEMO_MODE=true)", () => {
 
   it("keeps the shared organizer account read-only", async () => {
     const { client, res } = await signIn("organizer@demo.test");
-    assert.equal(res.headers.get("location"), "/admin");
+    assert.equal(res.headers.get("location"), "/?panel=%2Fadmin");
     const page = await client.fetch("/admin/banner");
     assert.equal(page.status, 200);
     const token = (await page.text()).match(/name="_csrf" value="([^"]+)"/)?.[1] ?? "";

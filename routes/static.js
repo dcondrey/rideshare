@@ -66,7 +66,15 @@ function serveFile(ctx, abs) {
 }
 
 /** Top-level convenience routes. */
-for (const name of ["styles.css", "app.js", "map.js", "trust.js", "favicon.svg", "robots.txt"]) {
+for (const name of [
+  "styles.css",
+  "app.js",
+  "map.js",
+  "trust.js",
+  "shell.js",
+  "favicon.svg",
+  "robots.txt",
+]) {
   get(`/${name}`, async (ctx) => {
     const abs = safeResolve(name);
     if (!abs) {

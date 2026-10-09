@@ -8,7 +8,7 @@ Zero-dependency, self-hosted ride-sharing platform for conference attendees.
 [![CI](https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/dcondrey/rideshare/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/codeql.yml?branch=main&style=flat-square&label=CodeQL)](https://github.com/dcondrey/rideshare/actions/workflows/codeql.yml) [![License](https://img.shields.io/github/license/dcondrey/rideshare?style=flat-square)](https://github.com/dcondrey/rideshare/blob/main/LICENSE)
 
 <p align="center">
-  <img src="docs/screenshots/browse.png" alt="The browse page of the live demo: a next-step card, a live activity feed, and ride offers and requests from other attendees" width="860">
+  <img src="docs/screenshots/map-shell.png" alt="The map-first home screen: a full-screen map of the venue, ride offers, requests and meetup points, with floating filters, navigation and a Post a ride button" width="860">
 </p>
 
 Event Rideshare is a self-hosted ride board for conference attendees, and a
@@ -20,6 +20,19 @@ When two people confirm they shared a ride, both receive a signed
 and verify anywhere. There's no central registry, no wallet vendor and no
 dependencies: the whole trust layer is plain JavaScript on Node's built-in
 crypto and the browser's WebCrypto.
+
+### The map is the app
+
+Signed in, the home screen is a full-screen map of the venue, ride offers,
+ride requests and meetup points, with floating filters to show or hide each.
+Everything else opens in a panel over the map: a side drawer on desktop, a
+bottom sheet you can pull up on a phone. Panels have real URLs
+(`/?panel=/rides/12`), so links, reloads and the back button work, and every
+page still renders on its own without JavaScript. The map refreshes its pins
+every 30 seconds and after anything you post, and stops zooming out at country
+level.
+
+<p align="center"><img src="docs/screenshots/map-shell-phone.png" alt="The map with a bottom-sheet panel on a phone" width="320"></p>
 
 ## Try the live demo
 
@@ -342,7 +355,7 @@ Event Rideshare gives organizers a private, self-hosted coordination tool they c
 | **Zero dependencies** | No `npm install`. Just Node >=22.5 and a single process. No build step. |
 | **Self-contained** | One Node process + one SQLite file. Nothing else to provision. |
 | **Privacy-first** | The invite allowlist is stored as one-way HMAC hashes. No trackers. No third-party JS. Aggregate-only analytics with k-anonymity. |
-| **Interactive map** | Custom slippy-map renderer (vanilla JS, no library). Pan, zoom, pinch, markers with popups. OpenStreetMap tiles by default, keyed providers optional. |
+| **Map-first interface** | The home screen is a full-screen map (custom renderer, no library) with layer filters; every other page opens in a slide-out panel with its own URL. OpenStreetMap tiles by default, keyed providers optional. |
 | **Portable trust** | Confirmed rides mint W3C Verifiable Credentials (VC 2.0 data model, VC-JWT, EdDSA) that holders carry across events. Each deployment is a `did:web` issuer; each user is a browser-generated `did:key` holder. See [above](#for-the-decentralized-identity-crowd) and [TRUST.md](./TRUST.md). |
 | **Live demo mode** | `DEMO_MODE=true` adds one-click demo accounts, synthetic attendees who react to you, and a guided tour. See [Try the live demo](#try-the-live-demo). |
 | **One-click deploy** | Docker, Railway, Render, Fly.io, or any VPS. |

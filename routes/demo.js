@@ -28,7 +28,7 @@ post("/demo/signin", async (ctx) => {
       ctx.ip(),
       String(ctx.req.headers["user-agent"] || ""),
     );
-    ctx.redirect(role === "organizer" ? "/admin" : "/demo", 303, {
+    ctx.redirect(role === "organizer" ? "/?panel=%2Fadmin" : "/?panel=%2Fdemo", 303, {
       "Set-Cookie": sessionCookieHeader(sessionId),
     });
   } catch (err) {

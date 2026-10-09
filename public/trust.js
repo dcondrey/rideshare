@@ -502,7 +502,8 @@
         .then((v) => buildPresentation(form.dataset.sdJwt || "", chosen, v.aud, v.nonce))
         .then((presentation) => {
           verifyForm.querySelector("input[name=jwt]").value = presentation;
-          verifyForm.submit();
+          // requestSubmit fires the submit event, so the map shell can show the report in its panel.
+          verifyForm.requestSubmit();
         })
         .catch((err) => say(err.message || String(err)));
     });
@@ -599,20 +600,22 @@
     else document.addEventListener("DOMContentLoaded", fn);
   }
 
-  ready(() => {
-    const create = document.getElementById("trust-create-key");
-    const status = document.getElementById("trust-create-status");
+  // Runs on the page at load and on any panel the map shell loads (public/shell.js).
+  function enhanceTrust(root) {
+    const byId = (id) => root.querySelector(`#${id}`);
+    const create = byId("trust-create-key");
+    const status = byId("trust-create-status");
     if (create && status) bindCreateButton(create, status);
 
-    const exp = document.getElementById("trust-export-key");
+    const exp = byId("trust-export-key");
     if (exp) bindExportButton(exp);
 
-    const rot = document.getElementById("trust-rotate-key");
+    const rot = byId("trust-rotate-key");
     if (rot) bindRotateButton(rot);
 
-    const restorePick = document.getElementById("trust-restore-pick");
-    const restoreFile = document.getElementById("trust-restore-file");
-    const restoreStatus = document.getElementById("trust-restore-status");
+    const restorePick = byId("trust-restore-pick");
+    const restoreFile = byId("trust-restore-file");
+    const restoreStatus = byId("trust-restore-status");
     if (restorePick && restoreFile && restoreStatus) {
       bindRestoreControl(
         restorePick,
@@ -622,24 +625,28 @@
       );
     }
 
-    const form = document.getElementById("trust-import-form");
-    const ta = document.getElementById("trust-import-text");
-    const file = document.getElementById("trust-import-file");
-    const pick = document.getElementById("trust-import-pick");
-    const results = document.getElementById("trust-import-results");
+    const form = byId("trust-import-form");
+    const ta = byId("trust-import-text");
+    const file = byId("trust-import-file");
+    const pick = byId("trust-import-pick");
+    const results = byId("trust-import-results");
     if (form && ta && file && pick && results) {
       bindImportForm(form, ta, file, pick, results);
     }
 
-    const holder = document.getElementById("oid4vp-holder");
-    const holderOut = document.getElementById("oid4vp-holder-result");
+    const holder = byId("oid4vp-holder");
+    const holderOut = byId("oid4vp-holder-result");
     if (holder && holderOut) bindOid4vpHolder(holder, holderOut);
 
-    const verifyForm = document.getElementById("sd-verify-form");
+    const verifyForm = byId("sd-verify-form");
     if (verifyForm) {
-      Array.prototype.forEach.call(document.querySelectorAll("form[data-sd-jwt]"), (f) =>
+      Array.prototype.forEach.call(root.querySelectorAll("form[data-sd-jwt]"), (f) =>
         bindSdPresent(f, verifyForm),
       );
     }
-  });
+  }
+
+  window.rideshareEnhancers = window.rideshareEnhancers || [];
+  window.rideshareEnhancers.push(enhanceTrust);
+  ready(() => enhanceTrust(document));
 })();

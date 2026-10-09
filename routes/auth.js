@@ -24,10 +24,11 @@ import { get, post } from "../lib/router.js";
 import { landingJsonLd, socialCard } from "../lib/seo.js";
 import { email as emailField } from "../lib/validate.js";
 import { demoSignInCard } from "./demo.js";
+import { renderShell } from "./map.js";
 
 get("/", async (ctx) => {
   if (ctx.user) {
-    ctx.redirect("/rides");
+    renderShell(ctx);
     return;
   }
   const event = getEventConfig();
@@ -168,7 +169,7 @@ get("/auth/callback", async (ctx) => {
     );
     return;
   }
-  ctx.redirect("/rides", 303, {
+  ctx.redirect("/", 303, {
     "Set-Cookie": sessionCookieHeader(result.sessionId),
   });
 });

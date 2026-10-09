@@ -6,11 +6,11 @@
  * <script> tag and read by /map.js. Style switcher is a query param + form.
  */
 
+import { config } from "../lib/config.js";
 import { getEventConfig } from "../lib/event-config.js";
 import { html, jsonScriptSafe, layout, raw } from "../lib/html.js";
-import { listStyles, resolveStyle } from "../lib/map-styles.js";
-import { listMeetups } from "../lib/meetups.js";
-import { browseRides } from "../lib/rides.js";
+import { buildMapData } from "../lib/map-data.js";
+import { listStyles } from "../lib/map-styles.js";
 import { get } from "../lib/router.js";
 
 get("/map", async (ctx) => {
@@ -20,99 +20,9 @@ get("/map", async (ctx) => {
   }
   const event = getEventConfig();
   const styles = listStyles();
-  const requested = (ctx.query.style ?? event.map?.style) || "osm";
-  const style = resolveStyle(requested, {
-    customTileUrl: event.map?.customTileUrl,
-    customAttribution: event.map?.customAttribution,
-  });
-
-  const meetups = listMeetups();
-
-  // Build ride pins. Each ride is plotted at, in priority order:
-  //   1. its custom pickup_lat/lng,
-  //   2. its referenced meetup's coordinates,
-  //   3. the airport's coordinates,
-  //   4. the venue (for "from venue" rides without other location).
-  const airportCoords = new Map(
-    (event.airports || [])
-      .filter((a) => Number.isFinite(a.lat) && Number.isFinite(a.lng))
-      .map((a) => [a.code, { lat: a.lat, lng: a.lng, name: a.name }]),
+  const { mapData, requested, style, meetupPins, venuePin, ridePins } = buildMapData(
+    ctx.query.style,
   );
-  const meetupCoords = new Map(
-    meetups.map((m) => [m.id, { lat: m.lat, lng: m.lng, name: m.name }]),
-  );
-  const venueCoord =
-    Number.isFinite(event.venue?.lat) && Number.isFinite(event.venue?.lng)
-      ? {
-          lat: event.venue.lat,
-          lng: event.venue.lng,
-          name: event.venue.name || "Venue",
-        }
-      : null;
-
-  const ridePins = browseRides({})
-    .map((r) => {
-      let coord = null;
-      let source = "";
-      if (Number.isFinite(r.pickup_lat) && Number.isFinite(r.pickup_lng)) {
-        coord = { lat: r.pickup_lat, lng: r.pickup_lng };
-        source = "Custom pin";
-      } else if (r.meetup_id && meetupCoords.get(r.meetup_id)) {
-        const m = /** @type {{ lat: number, lng: number, name: string }} */ (
-          meetupCoords.get(r.meetup_id)
-        );
-        coord = { lat: m.lat, lng: m.lng };
-        source = m.name;
-      } else if (airportCoords.has(r.airport)) {
-        const a = airportCoords.get(r.airport);
-        coord = { lat: a.lat, lng: a.lng };
-        source = `${r.airport} — ${a.name}`;
-      } else if (r.direction === "from_venue" && venueCoord) {
-        coord = { lat: venueCoord.lat, lng: venueCoord.lng };
-        source = venueCoord.name;
-      }
-      if (!coord) return null;
-      return {
-        id: r.id,
-        kind: r.kind,
-        direction: r.direction,
-        date: r.depart_date,
-        time: r.depart_time,
-        seats: r.seats,
-        notes: r.notes || "",
-        url: `/rides/${r.id}`,
-        source,
-        ...coord,
-      };
-    })
-    .filter(Boolean);
-
-  const venuePin = venueCoord ? { ...venueCoord, address: event.venue?.address || "" } : null;
-  const meetupPins = meetups.map((m) => ({
-    id: m.id,
-    name: m.name,
-    address: m.address || "",
-    lat: m.lat,
-    lng: m.lng,
-  }));
-
-  const center = venueCoord ?? { lat: 37.7749, lng: -122.4194 };
-  const zoom = Number.isFinite(event.map?.defaultZoom) ? event.map.defaultZoom : 11;
-
-  const mapData = {
-    center,
-    zoom,
-    tile: {
-      url: style.url,
-      subdomains: style.subdomains || [],
-      attribution: style.attribution,
-      maxZoom: style.maxZoom || 19,
-    },
-    venue: venuePin,
-    meetups: meetupPins,
-    rides: ridePins,
-    brandColor: event.brand?.primaryColor || "#4f46e5",
-  };
 
   ctx.html(
     layout({
@@ -171,3 +81,85 @@ get("/map", async (ctx) => {
     }),
   );
 });
+
+// ── Map-first shell ─────────────────────────────────────────────────────────
+// Signed-in users land on a full-screen map; every other page opens in a
+// slide-out panel (public/shell.js) and still renders on its own without JS.
+
+get("/map/data.json", async (ctx) => {
+  if (!ctx.user) {
+    ctx.json({ error: "sign in" }, 401);
+    return;
+  }
+  ctx.res.setHeader("Cache-Control", "no-store");
+  ctx.json(buildMapData(undefined).mapData);
+});
+
+/** @param {string} href @param {string} label @param {string} icon */
+const navItem = (href, label, icon) =>
+  html`<a href="${href}" class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">${icon}</span><span>${label}</span></a>`;
+
+/**
+ * Render the map-first page. `?panel=/path` opens that page in the panel.
+ * @param {import("../lib/router.js").RouteCtx} ctx
+ */
+export function renderShell(ctx) {
+  const user = /** @type {NonNullable<typeof ctx.user>} */ (ctx.user);
+  const event = getEventConfig();
+  const { mapData } = buildMapData(undefined);
+  const logo = event.brand?.logoPath || null;
+  ctx.html(
+    layout({
+      title: "Map",
+      user,
+      path: "/",
+      shell: true,
+      speculation: false,
+      children: html`
+        <div id="map" class="shell-map" role="region" aria-label="Map of the venue, rides and meetup points"></div>
+        <script type="application/json" id="map-data">${raw(jsonScriptSafe(mapData))}</script>
+
+        <header class="shell-top">
+          <a href="/" class="shell-brand">
+            ${logo ? html`<img src="${logo}" alt="" class="shell-logo">` : ""}
+            <span class="shell-brand-text"><strong>${event.name}</strong><span>Rideshare</span></span>
+          </a>
+          <div class="shell-filters" role="group" aria-label="Show on the map">
+            <button type="button" class="chip" data-layer="offer" aria-pressed="true"><span class="dot dot-offer"></span>Offers</button>
+            <button type="button" class="chip" data-layer="request" aria-pressed="true"><span class="dot dot-request"></span>Requests</button>
+            <button type="button" class="chip" data-layer="meetup" aria-pressed="true"><span class="dot dot-meetup"></span>Meetups</button>
+          </div>
+          ${config.demoMode ? html`<a href="/demo" class="shell-live"><span class="live-dot"></span>Live demo · tour</a>` : ""}
+        </header>
+
+        <nav class="shell-nav" aria-label="Primary">
+          ${navItem("/rides", "Rides", "≡")}
+          ${navItem("/rides/mine", "Mine", "◎")}
+          ${navItem("/trust", "Trust", "✓")}
+          ${navItem("/verify", "Verify", "⌕")}
+          ${navItem("/trust/didcomm", "DIDComm", "⇄")}
+          ${user.isAdmin ? navItem("/admin", "Admin", "⚙") : ""}
+          <form method="post" action="/auth/signout" class="shell-signout">
+            <button type="submit" class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">⎋</span><span>Sign out</span></button>
+          </form>
+        </nav>
+
+        <a href="/rides/new" class="shell-fab"><span aria-hidden="true">+</span> Post a ride</a>
+
+        <aside id="panel" class="panel" hidden role="dialog" aria-modal="false" aria-labelledby="panel-title">
+          <div class="panel-head">
+            <button type="button" class="panel-grip" aria-label="Expand or shrink the panel"></button>
+            <h2 id="panel-title" class="panel-title"></h2>
+            <button type="button" class="panel-close" aria-label="Close panel">×</button>
+          </div>
+          <div class="panel-body" tabindex="-1"></div>
+        </aside>
+
+        <noscript><p class="shell-noscript">The map needs JavaScript. <a href="/rides">Browse rides as a list</a>.</p></noscript>
+        <script src="/map.js" defer></script>
+        <script src="/trust.js" defer></script>
+        <script src="/shell.js" defer></script>
+      `,
+    }),
+  );
+}

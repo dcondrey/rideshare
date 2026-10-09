@@ -218,7 +218,8 @@
           this.tilesLayer.appendChild(img);
           this._tilesByKey[key] = img;
         }
-        img.style.transform = `translate3d(${x * TILE + o.x}px,${y * TILE + o.y}px,0)`;
+        // Whole pixels: fractional offsets leave hairline seams between tiles.
+        img.style.transform = `translate3d(${Math.round(x * TILE + o.x)}px,${Math.round(y * TILE + o.y)}px,0)`;
       }
     }
     // Drop tiles that aren't visible AND not at the current zoom level
@@ -245,6 +246,7 @@
       size: size,
     });
     node.dataset.size = String(size);
+    if (m.layer) node.dataset.layer = m.layer;
     node.addEventListener("click", (e) => {
       e.stopPropagation();
       this._showPopup(m, node);
@@ -252,6 +254,18 @@
     this.markers.push({ data: m, node: node });
     this._positionMarker(node, m);
     return node;
+  };
+
+  TinyMap.prototype.clearMarkers = function () {
+    this._closePopup();
+    for (const mk of this.markers) mk.node.remove();
+    this.markers = [];
+  };
+
+  /** Show or hide every marker tagged with `layer`. */
+  TinyMap.prototype.setLayerVisible = function (layer, visible) {
+    if (!visible && this.openPopup && this.openPopup.marker.layer === layer) this._closePopup();
+    for (const mk of this.markers) if (mk.data.layer === layer) mk.node.hidden = !visible;
   };
 
   TinyMap.prototype._positionMarker = function (node, m) {
@@ -590,95 +604,105 @@
       zoom: data.zoom,
     });
 
-    const brand = data.brandColor || "#4f46e5";
+    function draw(data) {
+      map.clearMarkers();
+      const brand = data.brandColor || "#4f46e5";
 
-    if (data.venue) {
-      map.addMarker({
-        lat: data.venue.lat,
-        lng: data.venue.lng,
-        color: brand,
-        label: "★",
-        size: 36,
-        zIndex: 1000,
-        ariaLabel: `Venue: ${data.venue.name}`,
-        html:
-          "<strong>" +
-          escapeHtml(data.venue.name) +
-          "</strong>" +
-          (data.venue.address
-            ? `<br><span class="muted">${escapeHtml(data.venue.address)}</span>`
-            : "") +
-          "<br><em>Venue</em>",
-      });
-    }
-
-    (data.meetups || []).forEach((m) => {
-      map.addMarker({
-        lat: m.lat,
-        lng: m.lng,
-        color: "#0ea5e9",
-        label: "M",
-        size: 28,
-        ariaLabel: m.name,
-        html:
-          "<strong>" +
-          escapeHtml(m.name) +
-          "</strong>" +
-          (m.address ? `<br><span class="muted">${escapeHtml(m.address)}</span>` : "") +
-          "<br><em>Meetup point</em>",
-      });
-    });
-
-    // Group rides at identical coordinates so overlapping pins get a count.
-    const byKey = {};
-    (data.rides || []).forEach((r) => {
-      const key = `${r.lat.toFixed(5)},${r.lng.toFixed(5)}`;
-      if (!byKey[key]) byKey[key] = [];
-      byKey[key].push(r);
-    });
-    Object.keys(byKey).forEach((k) => {
-      const rides = byKey[k];
-      const first = rides[0];
-      const color = first.kind === "offer" ? "#16a34a" : "#0ea5e9";
-      const label = rides.length > 1 ? String(rides.length) : "";
-      const html = rides
-        .map((r) => {
-          const dir = r.direction === "to_venue" ? "→ to venue" : "← from venue";
-          const k2 = r.kind === "offer" ? "Offering" : "Looking for";
-          return (
-            '<div class="tm-popup-ride">' +
+      if (data.venue) {
+        map.addMarker({
+          lat: data.venue.lat,
+          lng: data.venue.lng,
+          color: brand,
+          label: "★",
+          size: 36,
+          zIndex: 1000,
+          layer: "venue",
+          ariaLabel: `Venue: ${data.venue.name}`,
+          html:
             "<strong>" +
-            k2 +
-            " · " +
-            dir +
+            escapeHtml(data.venue.name) +
             "</strong>" +
-            '<br><span class="muted">' +
-            escapeHtml(r.date) +
-            " · " +
-            escapeHtml(r.time) +
-            " · " +
-            r.seats +
-            " seat" +
-            (r.seats === 1 ? "" : "s") +
-            "</span>" +
-            (r.source ? `<br><span class="muted">From: ${escapeHtml(r.source)}</span>` : "") +
-            '<br><a href="' +
-            r.url +
-            '">View ride</a>' +
-            "</div>"
-          );
-        })
-        .join('<hr class="tm-popup-sep">');
-      map.addMarker({
-        lat: first.lat,
-        lng: first.lng,
-        color: color,
-        label: label,
-        size: 26,
-        ariaLabel: `${rides.length} ride(s)`,
-        html: html,
+            (data.venue.address
+              ? `<br><span class="muted">${escapeHtml(data.venue.address)}</span>`
+              : "") +
+            "<br><em>Venue</em>",
+        });
+      }
+
+      (data.meetups || []).forEach((m) => {
+        map.addMarker({
+          lat: m.lat,
+          lng: m.lng,
+          color: "#0ea5e9",
+          label: "M",
+          size: 28,
+          layer: "meetup",
+          ariaLabel: m.name,
+          html:
+            "<strong>" +
+            escapeHtml(m.name) +
+            "</strong>" +
+            (m.address ? `<br><span class="muted">${escapeHtml(m.address)}</span>` : "") +
+            "<br><em>Meetup point</em>",
+        });
       });
-    });
+
+      // Group rides of one kind at identical coordinates so overlapping pins
+      // get a count; offers and requests stay separate so each can be hidden.
+      const byKey = {};
+      (data.rides || []).forEach((r) => {
+        const key = `${r.kind}:${r.lat.toFixed(5)},${r.lng.toFixed(5)}`;
+        if (!byKey[key]) byKey[key] = [];
+        byKey[key].push(r);
+      });
+      Object.keys(byKey).forEach((k) => {
+        const rides = byKey[k];
+        const first = rides[0];
+        const color = first.kind === "offer" ? "#16a34a" : "#0ea5e9";
+        const label = rides.length > 1 ? String(rides.length) : "";
+        const html = rides
+          .map((r) => {
+            const dir = r.direction === "to_venue" ? "→ to venue" : "← from venue";
+            const k2 = r.kind === "offer" ? "Offering" : "Looking for";
+            return (
+              '<div class="tm-popup-ride">' +
+              "<strong>" +
+              k2 +
+              " · " +
+              dir +
+              "</strong>" +
+              '<br><span class="muted">' +
+              escapeHtml(r.date) +
+              " · " +
+              escapeHtml(r.time) +
+              " · " +
+              r.seats +
+              " seat" +
+              (r.seats === 1 ? "" : "s") +
+              "</span>" +
+              (r.source ? `<br><span class="muted">From: ${escapeHtml(r.source)}</span>` : "") +
+              '<br><a href="' +
+              r.url +
+              '">View ride</a>' +
+              "</div>"
+            );
+          })
+          .join('<hr class="tm-popup-sep">');
+        map.addMarker({
+          lat: first.lat,
+          lng: first.lng,
+          color: color,
+          label: label,
+          size: 26,
+          layer: first.kind,
+          ariaLabel: `${rides.length} ${first.kind === "offer" ? "ride offer" : "ride request"}${rides.length === 1 ? "" : "s"}`,
+          html: html,
+        });
+      });
+      for (const layer of hidden) map.setLayerVisible(layer, false);
+    }
+    const hidden = new Set();
+    draw(data);
 
     // Auto-fit bounds to all pins (with padding).
     const pts = [];
@@ -690,5 +714,16 @@
       pts.push(r);
     });
     if (pts.length > 1) map.fitBounds(pts, 0.2);
+
+    // The map-first shell (public/shell.js) refreshes pins and toggles layers.
+    window.RideshareMap = {
+      map,
+      setData: draw,
+      setLayer(layer, visible) {
+        if (visible) hidden.delete(layer);
+        else hidden.add(layer);
+        map.setLayerVisible(layer, visible);
+      },
+    };
   });
 })();
