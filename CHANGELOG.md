@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Simulated transit vehicles and a traffic heatmap with a 12-hour time scrubber
 - Groups for shared taxis and transit, live trip status, and an arrivals board
 - Live location for ride partners and moving demo attendees on the map
 - Make the full-screen map the home screen, with slide-out panels
@@ -23,6 +24,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Tighten every guide, add README badges, correct claims that drifted from the code
 - Update changelog [skip ci]
