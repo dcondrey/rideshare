@@ -5,7 +5,9 @@
 #
 # Image size: ~70MB on top of node:22-alpine.
 
-FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 # 22-alpine, resolved 2026-09-12
+# node:22-alpine, digest resolved 2026-09-12. Docker allows comments only at the
+# start of a line, so this cannot sit after the FROM instruction.
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
 WORKDIR /app
 
