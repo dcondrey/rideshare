@@ -205,6 +205,9 @@
         let img = this._tilesByKey[key];
         if (!img) {
           img = el("img", "tm-tile");
+          // The page's same-origin referrer policy would strip the Referer, and
+          // the OSM tile usage policy requires one; the origin alone suffices.
+          img.referrerPolicy = "strict-origin-when-cross-origin";
           img.draggable = false;
           img.alt = "";
           img.loading = "eager";

@@ -1,0 +1,159 @@
+/*
+ * IDW Terminal palette (live demo, event.config.demo.yaml → brand.stylesheet).
+ * Phosphor CRT logic: a black void, white paper cards, and Phosphor Green only
+ * for live state and calls to action. Green never carries body text on white;
+ * links on paper are Terminal Black with a Scanline Green underline.
+ */
+:root {
+	color-scheme: dark;
+	--idw-black: #0a0a0a;
+	--idw-white: #ffffff;
+	--idw-green: #00ff41;
+	--idw-green-light: #b4ffb4;
+	--idw-scanline: #00cc33;
+	--idw-void: #1e1e1e;
+	--idw-grid: #2a2a2a;
+	--idw-concrete: #f5f5f0;
+	--idw-cyan: #00e5ff;
+	--idw-amber: #ffb000;
+	--idw-red: #ff3b30;
+
+	--brand: var(--idw-green);
+	--brand-dark: var(--idw-scanline);
+	--brand-tint: color-mix(in srgb, var(--idw-green) 14%, var(--idw-black));
+	--bg: var(--idw-black);
+	--surface: var(--idw-void);
+	--surface-2: var(--idw-void);
+	--border: var(--idw-grid);
+	--border-strong: #3a3a3a;
+	--text: var(--idw-concrete);
+	--text-muted: #a3a3a3;
+	--success: var(--idw-scanline);
+	--warning: var(--idw-amber);
+	--danger: var(--idw-red);
+	--info: var(--idw-cyan);
+}
+
+body {
+	background: var(--bg);
+	color: var(--text);
+}
+
+/* Paper: white cards carry the content, with light-surface tokens re-scoped. */
+.card,
+.ride-card,
+.stat-card,
+.tour li,
+.filter-bar,
+.tm-popup,
+.empty {
+	--surface: var(--idw-white);
+	--surface-2: var(--idw-concrete);
+	--border: #e5e5e0;
+	--border-strong: #d4d4cf;
+	--text: var(--idw-black);
+	--text-muted: #525252;
+	--brand: var(--idw-black);
+	--brand-tint: color-mix(in srgb, var(--idw-scanline) 12%, white);
+	--success: #15803d;
+	background: var(--surface);
+	color: var(--text);
+}
+.card a:not(.button),
+.ride-card a:not(.button),
+.tour li a:not(.button),
+.filter-bar a:not(.button),
+.empty a:not(.button) {
+	color: var(--idw-black);
+	text-decoration: underline;
+	text-decoration-color: var(--idw-scanline);
+	text-decoration-thickness: 2px;
+	text-underline-offset: 3px;
+}
+
+/* On the void, links and live state glow. */
+a {
+	color: var(--idw-green);
+}
+.site-header {
+	background: color-mix(in srgb, var(--idw-black) 92%, transparent);
+	border-bottom-color: var(--idw-grid);
+}
+.brand,
+.brand-name {
+	color: var(--idw-white);
+}
+.brand {
+	align-items: center;
+}
+.brand-logo {
+	height: 34px;
+}
+.primary-nav a,
+.link-button {
+	color: #c8c8c3;
+}
+.primary-nav a:hover,
+.primary-nav a[aria-current="page"],
+.link-button:hover {
+	color: var(--idw-green);
+}
+.hero-title {
+	color: var(--idw-white);
+}
+.hero-tagline {
+	color: var(--idw-green-light);
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 1rem;
+}
+
+/* Calls to action: Phosphor Green with black type, on paper and on the void. */
+.button-primary,
+.card .button-primary {
+	background: var(--idw-green);
+	border-color: var(--idw-green);
+	color: var(--idw-black);
+	font-weight: 700;
+}
+.button-primary:hover,
+.card .button-primary:hover {
+	background: var(--idw-scanline);
+	border-color: var(--idw-scanline);
+	color: var(--idw-black);
+}
+
+/* The demo strip is a live indicator: LIVE DEMO in green on the void. */
+.demo-strip {
+	background: var(--idw-black);
+	border-bottom: 1px solid var(--idw-grid);
+	color: #c8c8c3;
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 0.8rem;
+}
+.demo-strip strong {
+	color: var(--idw-green);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+.demo-strip strong::before {
+	content: "● ";
+}
+.demo-strip a {
+	color: var(--idw-green);
+}
+.activity-mine .activity-who {
+	color: #15803d;
+}
+.tour-done .tour-mark {
+	background: var(--idw-green);
+	border-color: var(--idw-black);
+	color: var(--idw-black);
+}
+
+code {
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.how-it-works li::before {
+	background: var(--idw-green);
+	color: var(--idw-black);
+}

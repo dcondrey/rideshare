@@ -8,6 +8,7 @@
  *   POST /auth/signout → end session
  */
 
+import { hasLogo } from "../lib/assets.js";
 import {
   clearSessionCookieHeader,
   consumeMagicLink,
@@ -15,12 +16,14 @@ import {
   signOut,
   startMagicLink,
 } from "../lib/auth.js";
+import { config } from "../lib/config.js";
 import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
 import { error as logError } from "../lib/log.js";
 import { get, post } from "../lib/router.js";
 import { landingJsonLd, socialCard } from "../lib/seo.js";
 import { email as emailField } from "../lib/validate.js";
+import { demoSignInCard } from "./demo.js";
 
 get("/", async (ctx) => {
   if (ctx.user) {
@@ -28,6 +31,7 @@ get("/", async (ctx) => {
     return;
   }
   const event = getEventConfig();
+  const logoSrc = hasLogo() ? "/logo" : event.brand?.logoPath || null;
   ctx.html(
     layout({
       title: "Sign in",
@@ -50,6 +54,7 @@ get("/", async (ctx) => {
       },
       children: html`
         <section class="hero" aria-labelledby="hero-title">
+          ${logoSrc ? html`<img src="${logoSrc}" alt="" class="hero-logo">` : ""}
           <h1 class="hero-title" id="hero-title">${event.longName}</h1>
           <p class="hero-tagline">${event.tagline}</p>
           <p class="hero-meta">
@@ -58,7 +63,10 @@ get("/", async (ctx) => {
           </p>
         </section>
 
-        <section class="card sign-in-card" aria-labelledby="sign-in-title">
+        ${
+          config.demoMode
+            ? demoSignInCard()
+            : html`<section class="card sign-in-card" aria-labelledby="sign-in-title">
           <h2 id="sign-in-title">Sign in with your email</h2>
           <p class="muted">
             Enter the email you used to register. We'll send you a one-time link.
@@ -80,7 +88,8 @@ get("/", async (ctx) => {
                 </p>`
               : ""
           }
-        </section>
+        </section>`
+        }
 
         <section class="how-it-works" aria-labelledby="how-it-works-title">
           <h2 id="how-it-works-title">How it works</h2>
@@ -96,6 +105,11 @@ get("/", async (ctx) => {
 });
 
 post("/auth/send", async (ctx) => {
+  // The live demo has no mail transport; its accounts sign in from the landing page.
+  if (config.demoMode) {
+    ctx.redirect("/");
+    return;
+  }
   const body = await ctx.formBody();
   let address;
   try {

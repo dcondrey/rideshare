@@ -20,7 +20,7 @@ get("/map", async (ctx) => {
   }
   const event = getEventConfig();
   const styles = listStyles();
-  const requested = (ctx.query.style ?? event.map?.style) || "voyager";
+  const requested = (ctx.query.style ?? event.map?.style) || "osm";
   const style = resolveStyle(requested, {
     customTileUrl: event.map?.customTileUrl,
     customAttribution: event.map?.customAttribution,
@@ -132,7 +132,7 @@ get("/map", async (ctx) => {
           <form method="get" action="/map" class="row">
             <label class="row-tight">
               <span class="muted small">Style</span>
-              <select name="style" onchange="this.form.submit()">
+              <select name="style" data-autosubmit>
                 ${styles.map(
                   (s) =>
                     html`<option value="${s.key}" ${requested === s.key ? "selected" : ""}>${s.label}</option>`,

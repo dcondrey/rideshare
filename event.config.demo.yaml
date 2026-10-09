@@ -1,0 +1,66 @@
+# ───────────────────────────────────────────────────────────────────────────
+#  Live-demo event. Loaded only when EVENT_CONFIG=event.config.demo.yaml
+#  (render.demo.yaml sets it). The Internet Demo Workshop (IDW) is fictional:
+#  a participant-driven demo unconference modeled on the Internet Identity
+#  Workshop, centred on live demonstrations and cross-ecosystem
+#  interoperability testing instead of standards talk. The dates are
+#  placeholders; DEMO_MODE moves them to the coming weeks at boot so the
+#  demo always shows an upcoming event (lib/demo.js).
+# ───────────────────────────────────────────────────────────────────────────
+
+name: IDW
+longName: Internet Demo Workshop
+tagline: "Show me, don't tell me. Live demos, interop plazas, and working code."
+
+dates:
+  start: 2026-04-21
+  end: 2026-04-23
+
+venue:
+  name: Bayshore Commons
+  address: Shoreline Blvd, Mountain View, CA
+  lat: 37.4143
+  lng: -122.0773
+
+airports:
+  - code: SFO
+    name: San Francisco Intl
+    lat: 37.6213
+    lng: -122.3790
+  - code: SJC
+    name: San Jose Mineta Intl
+    lat: 37.3639
+    lng: -121.9289
+  - code: OAK
+    name: Oakland Intl
+    lat: 37.7126
+    lng: -122.2197
+
+meetups:
+  - name: Mountain View Caltrain
+    address: 600 W Evelyn Ave, Mountain View
+    lat: 37.3946
+    lng: -122.0762
+  - name: El Camino hotel row
+    address: El Camino Real at Grant Rd, Mountain View
+    lat: 37.3792
+    lng: -122.0717
+  - name: Downtown Castro St
+    address: Castro St at California St, Mountain View
+    lat: 37.3925
+    lng: -122.0800
+
+map:
+  style: osm
+  defaultZoom: 10
+  customTileUrl: ""
+  customAttribution: ""
+
+# IDW Terminal palette: black void, white paper, Phosphor Green for live state.
+brand:
+  primaryColor: "#00FF41"
+  logoPath: /static/idw-logo.png
+  stylesheet: /static/idw-theme.css
+
+registrationUrl: null
+supportEmail: null

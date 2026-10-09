@@ -1,0 +1,38 @@
+# Public live demo on Render's free plan. In Render: New → Blueprint, pick this
+# repo, and set the Blueprint path to render.demo.yaml (Render accepts custom
+# Blueprint paths). Nothing else to fill in: APP_URL falls back to the
+# RENDER_EXTERNAL_URL Render provides, and the secrets are generated.
+#
+# DEMO_MODE turns on one-click demo accounts and synthetic attendees. Never set
+# it on a real event. The free plan has no persistent disk and spins down when
+# idle, so the database lives in /tmp and every restart is a fresh demo.
+#
+# The issuer DID is did:web:<service>.onrender.com. Its key is regenerated on
+# each restart, so a credential from an earlier run stops verifying. To keep one
+# issuer across restarts, set DEPLOYMENT_KEY to the contents of a key file
+# (see RUNBOOK.md, "Deployment key rotation").
+services:
+  - type: web
+    name: rideshare-demo
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+      - key: EVENT_CONFIG
+        value: event.config.demo.yaml
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /tmp/rideshare-demo.db
+      - key: DEPLOYMENT_KEY_PATH
+        value: /tmp/rideshare-demo.key
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ALLOWLIST_SALT
+        generateValue: true
+      - key: TRUST_PROXY
+        value: "true"

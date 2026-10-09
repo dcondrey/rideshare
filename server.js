@@ -25,6 +25,7 @@ import "./routes/trust.js";
 import "./routes/well-known.js";
 import "./routes/health.js";
 import "./routes/static.js";
+import "./routes/demo.js";
 
 // Seed the attendee allowlist from ./allowlist.csv (only if table is empty).
 import { seedAllowlistIfEmpty } from "./lib/allowlist.js";
@@ -39,6 +40,19 @@ import { info, error as logError } from "./lib/log.js";
 import { getDeploymentKey, revalidateImportedCredentials } from "./lib/trust.js";
 
 getDeploymentKey();
+
+// Live demo only: seed synthetic attendees once and keep them active.
+import { ensureDemoSeeded, startGhostActivity } from "./lib/demo.js";
+
+if (config.demoMode) {
+  try {
+    ensureDemoSeeded();
+  } catch (err) {
+    console.error(`[demo] ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+  startGhostActivity();
+}
 
 // Imported credentials are counted forever once verified, so a background
 // sweep re-checks the stalest few. Deliberately not on the /trust render path:

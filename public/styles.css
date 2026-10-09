@@ -1186,3 +1186,131 @@ fieldset legend {
 		}
 	}
 }
+
+/* ─── Hero logo ───────────────────────────────────────────────────────── */
+.hero-logo {
+	display: block;
+	width: auto;
+	height: clamp(96px, 18vw, 140px);
+	margin: 0 auto 1rem;
+}
+
+/* ─── Live demo (DEMO_MODE only) ──────────────────────────────────────── */
+.demo-strip {
+	background: color-mix(in srgb, var(--brand) 14%, var(--surface));
+	border-bottom: 1px solid color-mix(in srgb, var(--brand) 30%, var(--border));
+	font-size: 0.85rem;
+	padding: 0.45rem 0;
+	text-align: center;
+}
+.demo-strip a {
+	margin-left: 0.5rem;
+	font-weight: 600;
+}
+.demo-card {
+	max-width: 520px;
+}
+.demo-account {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.85rem 0;
+	border-top: 1px solid var(--border);
+}
+.demo-account-text {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	flex: 1;
+	min-width: 0;
+}
+.demo-account-email {
+	align-self: flex-start;
+	user-select: all;
+}
+.demo-account .button {
+	flex-shrink: 0;
+}
+.demo-type-in {
+	border-top: 1px solid var(--border);
+	padding-top: 0.85rem;
+}
+.demo-about {
+	max-width: 520px;
+	margin: 0 auto 2rem;
+}
+.demo-about h2 {
+	margin-top: 0;
+}
+.demo-manifesto {
+	margin: 0.75rem 0;
+	padding-left: 1.2rem;
+}
+.demo-manifesto li {
+	margin-block: 0.25rem;
+}
+@media (max-width: 520px) {
+	.demo-account {
+		flex-direction: column;
+		align-items: stretch;
+	}
+}
+.demo-panel {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: var(--gap);
+	margin-bottom: 1.5rem;
+}
+.demo-panel h2 {
+	margin-top: 0;
+}
+.activity {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	font-size: 0.9rem;
+}
+.activity li {
+	padding: 0.4rem 0;
+	border-top: 1px solid var(--border);
+}
+.activity li:first-child {
+	border-top: 0;
+}
+.activity-who {
+	font-weight: 600;
+}
+.activity-mine .activity-who {
+	color: var(--brand);
+}
+.tour {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 1.5rem;
+	display: grid;
+	gap: 0.75rem;
+}
+.tour li {
+	display: flex;
+	gap: 0.85rem;
+	align-items: flex-start;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	padding: 0.9rem 1rem;
+}
+.tour-mark {
+	flex: 0 0 1.6rem;
+	height: 1.6rem;
+	border-radius: 50%;
+	border: 2px solid var(--border-strong);
+	display: grid;
+	place-items: center;
+	font-size: 0.85rem;
+	font-weight: 700;
+}
+.tour-done .tour-mark {
+	background: var(--success);
+	border-color: var(--success);
+	color: #fff;
+}

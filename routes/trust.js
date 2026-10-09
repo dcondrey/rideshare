@@ -19,6 +19,8 @@
  *   POST /trust/verify                  → verify any credential, return reasoned result
  */
 
+import { onRideConfirmed } from "../lib/demo.js";
+import { pubKeyRawBytes } from "../lib/did.js";
 import { errorMessage } from "../lib/errors.js";
 import { html, layout } from "../lib/html.js";
 import { get, post } from "../lib/router.js";
@@ -304,7 +306,6 @@ get("/trust/credentials.json", async (ctx) => {
   ctx.res.end(
     JSON.stringify(
       {
-        "@context": "https://eventrideshare.org/contexts/v1",
         type: "RideshareCredentialBundle",
         exportedAt: new Date().toISOString(),
         subjectDid: getUserDid(user.id)?.did || null,
@@ -360,11 +361,9 @@ post("/rides/:id/confirm", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
   try {
-    const r = confirmRide({
-      rideId: parseInt(ctx.params.id, 10),
-      userId: user.id,
-    });
-    ctx.json(r);
+    const rideId = parseInt(ctx.params.id, 10);
+    const r = confirmRide({ rideId, userId: user.id });
+    ctx.json(onRideConfirmed(rideId, user.id, r));
   } catch (err) {
     ctx.json({ ok: false, error: errorMessage(err) }, 400);
   }
@@ -417,7 +416,10 @@ post("/trust/verify", async (ctx) => {
     ctx.error(`JWT too large (max ${MAX_JWT_CHARS} characters).`, 400);
     return;
   }
-  const result = await verifyCredential(jwt);
+  const self = getDeploymentKey();
+  const result = await verifyCredential(jwt, {
+    localIssuer: { did: self.did, rawPubKey: pubKeyRawBytes(self.publicKey) },
+  });
   let decoded = null;
   try {
     decoded = decodeJwt(jwt);

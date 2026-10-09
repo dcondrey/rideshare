@@ -17,6 +17,7 @@
  */
 
 import { db } from "../lib/db.js";
+import { onClaimCreated, onRideCreated } from "../lib/demo.js";
 import { errorMessage } from "../lib/errors.js";
 import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
@@ -46,6 +47,7 @@ import {
   reqString,
   ValidationError,
 } from "../lib/validate.js";
+import { demoRidesPanel } from "./demo.js";
 
 // Helpers ────────────────────────────────────────────────────────────────────
 function requireUser(ctx) {
@@ -149,6 +151,8 @@ get("/rides", async (ctx) => {
           </div>
           <a class="button button-primary" href="/rides/new">Post a ride</a>
         </section>
+
+        ${demoRidesPanel(user)}
 
         <form class="filter-bar" method="get" action="/rides">
           <label><span>Type</span>
@@ -271,6 +275,7 @@ post("/rides/new", async (ctx) => {
     pickupLat,
     pickupLng,
   });
+  onRideCreated(id);
   ctx.redirect(`/rides/${id}`);
 });
 
@@ -371,7 +376,6 @@ function postForm({ values = {} }) {
         <button type="submit" class="button button-primary">Post ride</button>
       </div>
     </form>
-    <script src="/app.js" defer></script>
   `;
 }
 
@@ -500,7 +504,7 @@ get("/rides/:id", async (ctx) => {
           ${
             isOwner
               ? html`<form method="post" action="/rides/${ride.id}/cancel" class="inline">
-                <button class="button button-danger" onclick="return confirm('Cancel this ride?')">Cancel ride</button>
+                <button class="button button-danger" data-confirm="Cancel this ride?">Cancel ride</button>
               </form>`
               : ""
           }
@@ -618,7 +622,7 @@ post("/rides/:id/claim", async (ctx) => {
   const seats = reqInt(body.seats ?? "1", "seats", { min: 1, max: 8 });
   const message = optString(body.message, "message", { max: 300 });
   try {
-    createClaim({ rideId, claimerId: user.id, seats, message });
+    onClaimCreated(createClaim({ rideId, claimerId: user.id, seats, message }));
   } catch (err) {
     if (/UNIQUE/.test(errorMessage(err))) {
       // Already claimed — silently redirect to the ride.

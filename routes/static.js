@@ -2,7 +2,7 @@
 /**
  * Static asset routes.
  *
- *   /styles.css, /app.js, /favicon.svg, /robots.txt, /map.js
+ *   /styles.css, /app.js, /map.js, /trust.js, /favicon.svg, /robots.txt
  *     → served from public/ at top level.
  *
  *   /static/<file> and /static/lib/<file>
@@ -66,7 +66,7 @@ function serveFile(ctx, abs) {
 }
 
 /** Top-level convenience routes. */
-for (const name of ["styles.css", "app.js", "map.js", "favicon.svg", "robots.txt"]) {
+for (const name of ["styles.css", "app.js", "map.js", "trust.js", "favicon.svg", "robots.txt"]) {
   get(`/${name}`, async (ctx) => {
     const abs = safeResolve(name);
     if (!abs) {

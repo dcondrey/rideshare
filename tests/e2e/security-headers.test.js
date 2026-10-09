@@ -32,7 +32,18 @@ describe("security headers", () => {
     "permissions-policy",
   ];
 
-  for (const path of ["/", "/about", "/styles.css", "/brand.css", "/app.js", "/robots.txt"]) {
+  // /trust.js and /map.js are listed because the pages that need them were
+  // shipped once with the file unrouted (a 404 that left DID creation dead).
+  for (const path of [
+    "/",
+    "/about",
+    "/styles.css",
+    "/brand.css",
+    "/app.js",
+    "/map.js",
+    "/trust.js",
+    "/robots.txt",
+  ]) {
     it(`sets every security header on ${path}`, async () => {
       const res = await srv.fetch(path);
       assert.equal(res.status, 200, `${path} did not serve`);

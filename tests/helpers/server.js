@@ -57,6 +57,7 @@ export async function startTestServer(envOverrides = {}) {
   await import("../../routes/trust.js");
   await import("../../routes/well-known.js");
   await import("../../routes/static.js");
+  await import("../../routes/demo.js");
   await import("../../lib/config.js");
   await (await import("../../lib/trust.js")).getDeploymentKey();
 

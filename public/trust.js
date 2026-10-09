@@ -195,7 +195,6 @@
       if (!rec) throw new Error("No key to export");
       return crypto.subtle.exportKey("jwk", rec.keyPair.privateKey).then((priv) =>
         crypto.subtle.exportKey("jwk", rec.keyPair.publicKey).then((pub) => ({
-          "@context": "https://eventrideshare.org/contexts/v1",
           type: "RideshareKeyBackup",
           exportedAt: new Date().toISOString(),
           did: rec.did,

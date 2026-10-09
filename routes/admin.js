@@ -25,6 +25,7 @@ import {
 } from "../lib/allowlist.js";
 import { hasLogo, MAX_LOGO_BYTES, removeLogo, uploadLogo } from "../lib/assets.js";
 import { clearBanner, getBanner, setBanner } from "../lib/banner.js";
+import { config } from "../lib/config.js";
 import { db } from "../lib/db.js";
 import { errorMessage } from "../lib/errors.js";
 import { getEventConfig, listOverridableKeys, setOverrides } from "../lib/event-config.js";
@@ -52,6 +53,12 @@ function requireAdmin(ctx) {
   }
   if (!ctx.user.isAdmin) {
     ctx.error("Admin only.", 403);
+    return null;
+  }
+  // The demo organizer account is shared by every visitor, so its admin pages
+  // are look-only: one visitor must not wipe or rebrand the demo for the rest.
+  if (config.demoMode && ctx.method === "POST") {
+    ctx.error("Admin changes are turned off in the live demo. Everything here is view-only.", 403);
     return null;
   }
   return ctx.user;
@@ -245,7 +252,7 @@ get("/admin/allowlist", async (ctx) => {
           <form method="post" action="/admin/allowlist/wipe">
             ${ctx.csrfField()}
             <button class="button button-danger"
-                    onclick="return confirm('Erase all ${allowlistCount()} allowlist entries?')">
+                    data-confirm="Erase all ${allowlistCount()} allowlist entries?">
               Wipe allowlist
             </button>
           </form>
@@ -441,7 +448,6 @@ get("/admin/config", async (ctx) => {
                     aria-describedby="logo-constraints" disabled>Upload logo</button>
           </form>
         </section>
-        <script src="/app.js" defer></script>
       `,
     }),
   );
@@ -584,7 +590,7 @@ get("/admin/meetups", async (ctx) => {
                         <form method="post" action="/admin/meetups/${m.id}/delete" class="inline">
                           ${ctx.csrfField()}
                           <button class="button button-small"
-                                  onclick="return confirm('Delete this meetup?')">Delete</button>
+                                  data-confirm="Delete this meetup?">Delete</button>
                         </form>
                       </li>`,
                   )}
@@ -660,7 +666,7 @@ get("/admin/banner", async (ctx) => {
                   <form method="post" action="/admin/banner/clear" class="inline">
                     ${ctx.csrfField()}
                     <button class="button button-small"
-                            onclick="return confirm('Clear the site banner?')">Clear</button>
+                            data-confirm="Clear the site banner?">Clear</button>
                   </form>
                 </section>
               `

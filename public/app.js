@@ -17,6 +17,23 @@
     if (el) el.textContent = text;
   };
 
+  // 0. Ask before a destructive submit. The CSP forbids inline handlers, so the
+  //    prompt text rides on a data attribute instead of onclick="confirm()".
+  document.addEventListener("click", (e) => {
+    const el = e.target instanceof Element ? e.target.closest("[data-confirm]") : null;
+    if (el && !window.confirm(el.getAttribute("data-confirm") || "Are you sure?")) {
+      e.preventDefault();
+    }
+  });
+
+  // A select that applies itself on change (the map style picker).
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (el instanceof HTMLSelectElement && el.hasAttribute("data-autosubmit") && el.form) {
+      el.form.requestSubmit();
+    }
+  });
+
   // 1. Reveal "other place" input when the airport selector is set to OTHER.
   const sel = document.getElementById("airport-select");
   const otherLabel = document.getElementById("other-place-label");

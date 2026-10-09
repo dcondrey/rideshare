@@ -87,7 +87,7 @@ meetups: []
 #   osm          — OpenStreetMap (classic colourful)
 #   custom       — uses map.customTileUrl + map.customAttribution below
 map:
-  style: voyager
+  style: osm
   defaultZoom: 11
   customTileUrl: ""
   customAttribution: ""
@@ -98,8 +98,10 @@ brand:
   # Optional logo. Either:
   #   - leave blank and upload a logo via /admin/config (stored in the DB,
   #     served from /logo); OR
-  #   - drop a file in public/ and set logoPath: /your-logo.svg
+  #   - drop a file in public/ and set logoPath: /static/your-logo.svg
   logoPath: null
+  # Optional extra stylesheet, loaded after the built-in CSS: drop a file in
+  # public/ and set stylesheet: /static/your-theme.css (see public/idw-theme.css).
 
 # Optional URL where attendees registered (shown if their email isn't on
 # the allowlist). Leave null to omit.
