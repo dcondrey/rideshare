@@ -108,7 +108,8 @@ export function demoSignInCard() {
         Everyone else on the board is a synthetic attendee. They post rides,
         answer your claims and confirm trips, so you can walk the whole flow,
         from claiming a seat to holding a W3C Verifiable Credential, on your own.
-        Data resets whenever the demo restarts.
+        Then try selective disclosure (SD-JWT VC), OpenID4VCI and OpenID4VP with a
+        wallet, and DIDComm between events. Data resets whenever the demo restarts.
       </p>
     </section>`;
 }
@@ -182,8 +183,9 @@ function nextStep(t) {
   }
   if (t.credentialCount > 0) {
     return html`<p>You hold ${t.credentialCount} RideAttendanceCredential${t.credentialCount === 1 ? "" : "s"},
-      signed by this event's <code>did:web</code> issuer. Paste one into the verifier and watch every check run.</p>
-      <p><a class="button button-primary" href="/trust">View my credentials</a></p>`;
+      signed by this event's <code>did:web</code> issuer, plus an SD-JWT VC copy. Reveal only some of its
+      claims to the verifier, or send it to a wallet.</p>
+      <p><a class="button button-primary" href="/trust#selective-disclosure">Try selective disclosure</a></p>`;
   }
   return html`<p>Post a ride or claim a seat. Someone usually answers within a minute.</p>
     <p><a class="button button-primary" href="/rides/new">Post a ride</a></p>`;
@@ -212,7 +214,7 @@ get("/demo", async (ctx) => {
         <section class="page-head">
           <div>
             <h1>Welcome, ${user.displayName || "guest"}</h1>
-            <p class="muted">Five steps through the rideshare and its decentralized trust layer.</p>
+            <p class="muted">Five steps through the rideshare and its decentralized trust layer, then four more protocols to try.</p>
           </div>
           <a class="button" href="/rides">Browse rides</a>
         </section>
@@ -246,6 +248,17 @@ get("/demo", async (ctx) => {
               and checks the signature, or verify it with any VC-JWT tool.`,
           )}
         </ol>
+        <h2>Go further</h2>
+        <ul class="tour-more">
+          <li><strong>Selective disclosure.</strong> On <a href="/trust#selective-disclosure">Trust</a>, tick only
+            the claims to reveal from your SD-JWT VC; your browser signs a key-binding proof for one verifier, once.</li>
+          <li><strong>Add it to a wallet.</strong> "Add to a wallet" on <a href="/trust">Trust</a> shows an
+            OpenID4VCI offer as a QR code and PIN for any wallet that supports the pre-authorized flow.</li>
+          <li><strong>Verify someone.</strong> <a href="/verify">Verify an attendee</a> creates an OpenID4VP request
+            signed by this event's DID; answer it from a wallet, or from this browser.</li>
+          <li><strong>Talk to another event.</strong> <a href="/trust/didcomm">DIDComm</a> sends an encrypted trust
+            ping or feature query to any deployment's DID and shows the authenticated reply.</li>
+        </ul>
         <p class="muted small">Want the organizer's view? Sign out and sign in as
           <code>${DEMO_ORGANIZER_EMAIL}</code>.</p>
       `,

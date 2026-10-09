@@ -3,8 +3,8 @@
 // of `npm test`: it needs the didcomm WASM package, which this repo does not
 // depend on. From the repo root, without touching package.json or a lockfile:
 //   npm i --no-save --no-package-lock didcomm@0.4.1 && node tests/interop/didcomm-rust.mjs
-// didcomm-rust defaults anoncrypt to XC20P (optional in DIDComm, not supported
-// here), so the script asks it for the required A256CBC-HS512.
+// Anoncrypt is checked with all three content algorithms, including
+// didcomm-rust's default XC20P.
 import * as didcomm from "didcomm";
 import { generateKeyPairSync } from "node:crypto";
 import { packEncrypted, unpackEncrypted, x25519PublicKey } from "../../lib/didcomm-crypto.js";
@@ -20,16 +20,32 @@ const secretsFor = (people) => ({
   find_secrets: async (ids) => ids.filter((id) => people.some((x) => x.kid === id)),
 });
 const plain = (from) => ({ id: "m-1", typ: "application/didcomm-plain+json", type: "https://didcomm.org/trust-ping/2.0/ping", from, to: [bob.did], body: { response_requested: true } });
-for (const auth of [true, false]) {
+const CASES = [
+  { auth: true, enc: "A256CBC-HS512", rust: undefined },
+  { auth: false, enc: "A256CBC-HS512", rust: "A256cbcHs512EcdhEsA256kw" },
+  { auth: false, enc: "A256GCM", rust: "A256gcmEcdhEsA256kw" },
+  { auth: false, enc: "XC20P", rust: "Xc20pEcdhEsA256kw" },
+];
+let failed = 0;
+for (const { auth, enc, rust } of CASES) {
+  const label = `${auth ? "authcrypt" : "anoncrypt"} ${enc}`;
   // rust → ours
   const msg = new Message(auth ? plain(alice.did) : { ...plain(alice.did), from: undefined });
-  const [packed] = await msg.pack_encrypted(bob.did, auth ? alice.did : null, null, resolver, secretsFor([alice]), { forward: false, enc_alg_anon: "A256cbcHs512EcdhEsA256kw" });
-  const r = await unpackEncrypted(JSON.parse(packed), new Map([[bob.kid, bob.kp.privateKey]]), async (skid) => { if (skid !== alice.kid) throw new Error("skid " + skid); return x25519PublicKey(alice.jwk); });
-  console.log(auth ? "authcrypt" : "anoncrypt", "rust→ours:", r.authcrypt === auth && r.message.type.endsWith("/ping") ? "OK" : "FAIL", r.senderKid);
-  // ours → rust (alice now receives)
+  const [packed] = await msg.pack_encrypted(bob.did, auth ? alice.did : null, null, resolver, secretsFor([alice]), {
+    forward: false,
+    ...(rust ? { enc_alg_anon: rust } : {}),
+  });
+  const r = await unpackEncrypted(JSON.parse(packed), new Map([[bob.kid, bob.kp.privateKey]]), async (skid) => {
+    if (skid !== alice.kid) throw new Error(`skid ${skid}`);
+    return x25519PublicKey(alice.jwk);
+  });
+  const in1 = r.authcrypt === auth && r.message.type.endsWith("/ping");
+  // ours → rust
   const toAlice = { id: "m-2", typ: "application/didcomm-plain+json", type: "https://didcomm.org/trust-ping/2.0/ping-response", thid: "m-1", ...(auth ? { from: bob.did } : {}), to: [alice.did], body: {} };
-  const jwe = packEncrypted(toAlice, [{ kid: alice.kid, publicKey: alice.kp.publicKey }], auth ? { kid: bob.kid, privateKey: bob.kp.privateKey } : undefined);
+  const jwe = packEncrypted(toAlice, [{ kid: alice.kid, publicKey: alice.kp.publicKey }], auth ? { kid: bob.kid, privateKey: bob.kp.privateKey } : undefined, { enc });
   const [m2, meta] = await Message.unpack(JSON.stringify(jwe), resolver, secretsFor([alice]), {});
-  const v = m2.as_value();
-  console.log(auth ? "authcrypt" : "anoncrypt", "ours→rust:", v.thid === "m-1" && meta.authenticated === auth && meta.encrypted ? "OK" : `FAIL ${JSON.stringify(meta)}`);
+  const in2 = m2.as_value().thid === "m-1" && meta.authenticated === auth && meta.encrypted;
+  if (!in1 || !in2) failed++;
+  console.log(`${label.padEnd(24)} rust→ours: ${in1 ? "OK" : "FAIL"}   ours→rust: ${in2 ? "OK" : `FAIL ${JSON.stringify(meta)}`}`);
 }
+process.exit(failed ? 1 : 0);

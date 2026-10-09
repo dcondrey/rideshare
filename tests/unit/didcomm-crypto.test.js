@@ -10,7 +10,12 @@ import { createPrivateKey, generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { packEncrypted, unpackEncrypted, x25519PublicKey } from "../../lib/didcomm-crypto.js";
+import {
+  hchacha20,
+  packEncrypted,
+  unpackEncrypted,
+  x25519PublicKey,
+} from "../../lib/didcomm-crypto.js";
 
 const vector = JSON.parse(
   readFileSync(new URL("../vectors/didcomm-authcrypt-x25519.json", import.meta.url), "utf8"),
@@ -87,14 +92,44 @@ describe("DIDComm encryption", () => {
     await assert.rejects(unpackEncrypted(lying, mine, aliceKey), /from does not match/);
   });
 
-  it("refuses messages for someone else and optional content algorithms", async () => {
+  it("derives the HChaCha20 subkey from the draft's test vector", () => {
+    const key = Buffer.from([...Array(32).keys()]);
+    const nonce = Buffer.from("000000090000004a0000000031415927", "hex");
+    assert.equal(
+      hchacha20(key, nonce).toString("hex"),
+      "82413b4227b27bfed30e42508a877d73a0f9e4d58a74a853c12ec41326d3ecdc",
+    );
+  });
+
+  for (const enc of /** @type {const} */ (["A256GCM", "XC20P"])) {
+    it(`round-trips anoncrypt with ${enc}, and rejects a flipped bit`, async () => {
+      const { from: _f, ...anon } = msg;
+      const jwe = packEncrypted(anon, [{ kid: bob.kid, publicKey: bob.publicKey }], undefined, {
+        enc,
+      });
+      assert.equal(JSON.parse(Buffer.from(jwe.protected, "base64url").toString()).enc, enc);
+      assert.equal((await unpackEncrypted(jwe, mine, aliceKey)).message.id, "1");
+      const ct = Buffer.from(jwe.ciphertext, "base64url");
+      ct[0] ^= 1;
+      await assert.rejects(
+        unpackEncrypted({ ...jwe, ciphertext: ct.toString("base64url") }, mine, aliceKey),
+      );
+    });
+  }
+
+  it("refuses messages for someone else, unknown enc, and authcrypt without A256CBC-HS512", async () => {
     const jwe = packEncrypted(msg, [{ kid: alice.kid, publicKey: alice.publicKey }]);
     await assert.rejects(unpackEncrypted(jwe, mine, aliceKey), /not addressed/);
-    const h = JSON.parse(Buffer.from(jwe.protected, "base64url").toString());
-    const xc = {
-      ...jwe,
-      protected: Buffer.from(JSON.stringify({ ...h, enc: "XC20P" })).toString("base64url"),
-    };
-    await assert.rejects(unpackEncrypted(xc, mine, aliceKey), /unsupported enc/);
+    const auth = packEncrypted(msg, [{ kid: bob.kid, publicKey: bob.publicKey }], {
+      kid: alice.kid,
+      privateKey: alice.privateKey,
+    });
+    const h = JSON.parse(Buffer.from(auth.protected, "base64url").toString());
+    const swap = (enc) => ({
+      ...auth,
+      protected: Buffer.from(JSON.stringify({ ...h, enc })).toString("base64url"),
+    });
+    await assert.rejects(unpackEncrypted(swap("XC20P"), mine, aliceKey), /committing AEAD/);
+    await assert.rejects(unpackEncrypted(swap("A128CBC-HS256"), mine, aliceKey), /unsupported enc/);
   });
 });
