@@ -74,10 +74,15 @@
 
   /** @param {string} path @param {{ push?: boolean }} [opts] */
   function open(path, opts = {}) {
+    const target = new URL(path, location.origin);
+    if (target.origin !== location.origin) return;
     const ticket = ++loading;
     panel.setAttribute("aria-busy", "true");
     if (!opener && document.activeElement instanceof HTMLElement) opener = document.activeElement;
-    fetch(path, { credentials: "same-origin", headers: { Accept: "text/html" } })
+    fetch(target.pathname + target.search, {
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    })
       .then((r) => {
         if (new URL(r.url).pathname === "/" && !new URL(r.url).searchParams.get("panel")) {
           // Signed out, or the page sent us home.

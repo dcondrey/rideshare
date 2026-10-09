@@ -36,7 +36,7 @@ describe("magic link invalidation", () => {
   before(() => {
     globalThis.fetch = /** @type {typeof fetch} */ (
       async (url, init) => {
-        if (!String(url).includes("resend.com")) return realFetch(url, init);
+        if (new URL(String(url)).hostname !== "api.resend.com") return realFetch(url, init);
         const body = JSON.parse(String(init?.body));
         const link = String(body.text).match(/https?:\/\/\S+/)?.[0] ?? "";
         tokens.push(new URL(link).searchParams.get("token") ?? "");

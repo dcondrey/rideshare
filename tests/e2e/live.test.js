@@ -123,4 +123,33 @@ describe("live location channel", () => {
     );
     assert.equal((await post("rs_session=nope", "/live/position", { lat: 1, lng: 1 })).status, 401);
   });
+
+  it("moves each synthetic attendee once, however many rides they post", async () => {
+    const { db } = await srv.mod("lib/db.js");
+    const { createRide } = await srv.mod("lib/rides.js");
+    const { ghostPositions } = await srv.mod("lib/live.js");
+    const r = db
+      .prepare(
+        "INSERT INTO users (email, display_name, created_at, last_seen_at) VALUES (?, ?, 0, 0)",
+      )
+      .run("g1@ghost.demo.test", "Ghost");
+    const id = Number(r.lastInsertRowid);
+    for (const direction of ["to_venue", "from_venue"]) {
+      createRide({
+        userId: id,
+        kind: "offer",
+        direction,
+        airport: "SFO",
+        otherPlace: null,
+        departDate: "2026-01-01",
+        departTime: "10:00",
+        flexMinutes: 0,
+        seats: 2,
+        notes: null,
+      });
+    }
+    const mine = ghostPositions(Date.now()).filter((g) => g.id === id);
+    assert.equal(mine.length, 1);
+    assert.equal(mine[0].synthetic, true);
+  });
 });

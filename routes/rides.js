@@ -22,6 +22,7 @@ import { errorMessage } from "../lib/errors.js";
 import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
 import { listMeetups } from "../lib/meetups.js";
+import { rateLimit } from "../lib/rate-limit.js";
 import {
   browseRides,
   claimsByUser,
@@ -207,9 +208,27 @@ get("/rides/new", async (ctx) => {
   ctx.html(layout({ title: "Post a ride", user, path: ctx.pathname, children: postForm({}) }));
 });
 
+// Spam guard for the public board. Keyed per user, not per IP: attendees at
+// a venue often share one NAT address. Every user is already allowlisted.
+const POST_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Count one submission; on overflow answer 429 with Retry-After.
+ * @param {import("../lib/router.js").RouteCtx} ctx @param {string} key @param {number} limit
+ * @returns {boolean} true when the request may proceed
+ */
+function withinLimit(ctx, key, limit) {
+  const rl = rateLimit(key, limit, POST_WINDOW_MS);
+  if (rl.ok) return true;
+  ctx.res.setHeader("Retry-After", String(Math.ceil(rl.retryAfterMs / 1000)));
+  ctx.error("You're posting faster than we allow. Try again in a few minutes.", 429);
+  return false;
+}
+
 post("/rides/new", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
+  if (!withinLimit(ctx, `ride-post:${user.id}`, 5)) return;
   const body = await ctx.formBody();
   const event = getEventConfig();
   const airportCodes = [...event.airports.map((a) => a.code), "OTHER"];
@@ -617,6 +636,7 @@ get("/rides/:id", async (ctx) => {
 post("/rides/:id/claim", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
+  if (!withinLimit(ctx, `ride-claim:${user.id}`, 10)) return;
   const rideId = parseInt(ctx.params.id, 10);
   const body = await ctx.formBody();
   const seats = reqInt(body.seats ?? "1", "seats", { min: 1, max: 8 });

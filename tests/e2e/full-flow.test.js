@@ -162,4 +162,39 @@ describe("full flow: sign in -> post ride -> claim -> accept", () => {
     assert.equal(body.includes('<div class="stat-value">1</div>'), true, "expected 1 poster");
     assert.equal(body.includes('<div class="stat-value">2</div>'), true, "expected 2 matched");
   });
+
+  it("rate-limits ride posting per user: the 6th post in 10 minutes is refused", async () => {
+    const postOne = () =>
+      srv.fetch("/rides/new", {
+        method: "POST",
+        headers: { cookie: posterCookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          kind: "request",
+          direction: "from_venue",
+          airport: "SFO",
+          depart_date: "2026-01-03",
+          depart_time: "09:00",
+          seats: "1",
+        }).toString(),
+      });
+    // One post already happened above; four more fill the window.
+    for (let i = 0; i < 4; i++) assert.equal((await postOne()).status, 303);
+    const res = await postOne();
+    assert.equal(res.status, 429);
+    assert.ok(Number(res.headers.get("retry-after")) > 0);
+    // A different attendee is unaffected.
+    const other = await srv.fetch("/rides/new", {
+      method: "POST",
+      headers: { cookie: claimerCookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        kind: "offer",
+        direction: "to_venue",
+        airport: "SFO",
+        depart_date: "2026-01-03",
+        depart_time: "09:00",
+        seats: "1",
+      }).toString(),
+    });
+    assert.equal(other.status, 303);
+  });
 });
