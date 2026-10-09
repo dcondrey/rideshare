@@ -109,3 +109,9 @@ registrationUrl: null
 
 # Optional support contact shown in the footer and on error pages.
 supportEmail: null
+
+# Optional features, all off by default.
+#   hotelSharing: attendees post rooms to share or look for a roommate.
+#     Hotel name and contacts stay hidden until both sides agree.
+# features:
+#   hotelSharing: true

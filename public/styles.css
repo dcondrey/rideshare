@@ -2384,3 +2384,10 @@ fieldset legend {
 .pick-banner[hidden] {
 	display: none;
 }
+.safety-note ul {
+	padding-left: 1.2rem;
+	margin: 0.5rem 0 0;
+}
+.safety-note summary {
+	cursor: pointer;
+}

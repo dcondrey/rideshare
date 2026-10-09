@@ -262,6 +262,10 @@ Moderation is built in: block someone (it works both ways), report a message, an
 
 Invite people to meet from their profile or a conversation: a title, a time, and a place (the venue, a meetup point, or a spot you tap on the map). Invitees answer Going or Can't make it, and the meeting shows as a pink pin on the map for the people on it only. Each person can keep notes on a meeting that nobody else can read, the organizer included. Code: `lib/meetings.js`.
 
+### Hotel room sharing
+
+Off unless the event config sets `features: { hotelSharing: true }` (the live demo has it on). Attendees post a room with space to share, or say they're looking for one: area, dates, places, price per night and preferences. The hotel's name and both people's contacts appear only after the poster accepts a request, the same pattern as rides. Hotels never appear on the map. The page leads with safety advice, and blocking applies here too. Code: `lib/hotels.js`.
+
 ### Cost, CO2, luggage and trip safety
 
 - **Cost and CO2.** Each ride page estimates the fare split and the CO2 saved by sharing (one car instead of several, or transit instead of cars). Straight-line distance times a road factor and flat rates, labeled as an estimate. Code: `lib/estimates.js`.

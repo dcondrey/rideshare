@@ -8,6 +8,7 @@
 
 import { config } from "../lib/config.js";
 import { getEventConfig } from "../lib/event-config.js";
+import { hotelSharingEnabled } from "../lib/hotels.js";
 import { html, jsonScriptSafe, layout, raw } from "../lib/html.js";
 import { buildMapData } from "../lib/map-data.js";
 import { listStyles } from "../lib/map-styles.js";
@@ -147,6 +148,7 @@ export function renderShell(ctx) {
             <summary class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">⋯</span><span>More</span></summary>
             <div class="shell-more-menu">
               ${navItem("/meetings", "Meetings", "◇")}
+              ${hotelSharingEnabled() ? navItem("/hotels", "Hotels", "⌂") : ""}
               ${navItem("/arrivals", "Arrivals", "⇣")}
               ${navItem("/me", "Profile", "✎")}
               ${navItem("/trust", "Trust", "✓")}

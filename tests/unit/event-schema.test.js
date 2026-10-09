@@ -49,6 +49,12 @@ describe("validateEventConfig", () => {
     assert.ok(paths(problems).includes("venue.lng"));
   });
 
+  it("accepts known feature switches and rejects unknown or non-boolean ones", () => {
+    assert.deepEqual(withPatch({ features: { hotelSharing: true } }), []);
+    assert.equal(withPatch({ features: { hotelShare: true } })[0].path, "features.hotelShare");
+    assert.equal(withPatch({ features: { hotelSharing: "yes" } })[0].path, "features.hotelSharing");
+  });
+
   it("suggests the intended key for a near-miss typo", () => {
     const { airports, ...rest } = VALID;
     const problems = validateEventConfig({ ...rest, airprots: airports });

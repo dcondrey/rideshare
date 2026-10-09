@@ -45,6 +45,7 @@ Known unmitigated threats are [Residual risks](#residual-risks), not out of scop
 | A9 | Issued Verifiable Credentials (JWS) | Public, cryptographically bound | With the holder | n/a: public |
 | A11 | Chat and direct messages | Medium-High | `data/app.db` tables `chat_messages`, `direct_messages`, `blocks`, `reports` | No |
 | A12 | Meetings and private meeting notes | Medium | `data/app.db` tables `meetings`, `meeting_invites`, `meeting_notes` | No: a place and time reveal where someone will be |
+| A13 | Hotel room-sharing listings | High | `data/app.db` tables `hotel_listings`, `hotel_requests` | No: reveals where someone sleeps |
 | A10 | Live location (opt-in sharing) | High while shared | Server memory only: latest point per user, 2-minute expiry | Partly: stale fast, but a past position can reveal a hotel |
 
 A1 rows are `HMAC(server_secret, lower(email))`. A DB insider can test guessed emails but not read the list (T-A1-I2; see also [T-A1-I1](#a1-id)).
@@ -250,6 +251,17 @@ Code: `lib/meetings.js`, `routes/meetings.js`.
   *Mitigation:* pins come from a per-user endpoint (`/meetings/pins.json`), never the shared map data; the page and live events go to invitees only. You can invite only people you could message (A11 rules), at most 8. `tests/e2e/meetings.test.js`.
 - **T-A12-I2**: Someone reads another person's private notes.
   *Mitigation:* notes are keyed by (meeting, author) and only ever selected for the author. Stored in the clear, not end-to-end encrypted.
+
+### Asset A13: hotel room sharing
+
+Code: `lib/hotels.js`, `routes/hotels.js`. Off by default (`features.hotelSharing`).
+
+- **T-A13-I1**: Strangers learn which hotel someone is staying at.
+  *Mitigation:* listings show an area, never the hotel; the name and contacts are revealed only to the poster and people they accept. No map pins. `tests/e2e/hotels.test.js`.
+- **T-A13-S1**: A bad actor targets someone through a room share.
+  *Mitigation:* allowlisted accounts only; the poster chooses who to accept; requests and decisions are audited; blocking hides listings both ways; safety guidance on every page; organizers can act on reports. Not preventable in software: attendees must vet each other, and the UI says so.
+- **T-A13-D1**: Listing or request spam.
+  *Mitigation:* 5 listings and 10 requests an hour per user; at most 3 places per listing.
 
 ### Asset A10: live location
 
