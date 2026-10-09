@@ -258,6 +258,10 @@ Browsers can't share location in the background, so the page holds a Screen Wake
 
 Moderation is built in: block someone (it works both ways), report a message, and organizers get a queue at `/admin/reports` to delete a message or mute its author for a day. Messages are rate-limited and capped at 500 characters. They're stored on the server and are not end-to-end encrypted.
 
+### Meetings
+
+Invite people to meet from their profile or a conversation: a title, a time, and a place (the venue, a meetup point, or a spot you tap on the map). Invitees answer Going or Can't make it, and the meeting shows as a pink pin on the map for the people on it only. Each person can keep notes on a meeting that nobody else can read, the organizer included. Code: `lib/meetings.js`.
+
 ### Cost, CO2, luggage and trip safety
 
 - **Cost and CO2.** Each ride page estimates the fare split and the CO2 saved by sharing (one car instead of several, or transit instead of cars). Straight-line distance times a road factor and flat rates, labeled as an estimate. Code: `lib/estimates.js`.

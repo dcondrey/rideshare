@@ -2311,3 +2311,76 @@ fieldset legend {
 	border-left: 3px solid var(--border-strong);
 	background: var(--surface-2);
 }
+
+/* ── Meetings ────────────────────────────────────────────────────────────── */
+.dot-meeting {
+	background: #ec4899;
+}
+.meeting-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: 0.5rem;
+}
+.meeting-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.25rem 0.6rem;
+	padding: 0.8rem 1rem;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	color: inherit;
+	text-decoration: none;
+}
+.meeting-row .muted {
+	flex-basis: 100%;
+}
+[data-custom-place][hidden] {
+	display: none;
+}
+.pick-row {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+}
+.thread-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.75rem;
+}
+.thread-head .thread-title {
+	margin: 0;
+}
+.panel.is-picking {
+	transform: translateY(calc(100% - 56px));
+	opacity: 0.35;
+	pointer-events: none;
+}
+@media (min-width: 721px) {
+	.panel.is-picking {
+		transform: translateX(calc(100% + 24px));
+	}
+}
+.pick-banner {
+	position: fixed;
+	top: 72px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 2100;
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.6rem 0.9rem;
+	border-radius: 999px;
+	background: #0a0a0a;
+	color: #fff;
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+}
+.pick-banner[hidden] {
+	display: none;
+}

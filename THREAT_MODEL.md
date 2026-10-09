@@ -44,6 +44,7 @@ Known unmitigated threats are [Residual risks](#residual-risks), not out of scop
 | A8 | Session IDs | High while valid | `data/app.db` table `sessions`, opaque random | Yes: delete the row |
 | A9 | Issued Verifiable Credentials (JWS) | Public, cryptographically bound | With the holder | n/a: public |
 | A11 | Chat and direct messages | Medium-High | `data/app.db` tables `chat_messages`, `direct_messages`, `blocks`, `reports` | No |
+| A12 | Meetings and private meeting notes | Medium | `data/app.db` tables `meetings`, `meeting_invites`, `meeting_notes` | No: a place and time reveal where someone will be |
 | A10 | Live location (opt-in sharing) | High while shared | Server memory only: latest point per user, 2-minute expiry | Partly: stale fast, but a past position can reveal a hotel |
 
 A1 rows are `HMAC(server_secret, lower(email))`. A DB insider can test guessed emails but not read the list (T-A1-I2; see also [T-A1-I1](#a1-id)).
@@ -240,6 +241,15 @@ Code: `lib/chat.js`, `routes/chat.js`. Stored in the clear behind access checks 
   *Mitigation:* 8 room posts and 20 messages a minute per user, 500 characters each; report button on every message; organizer queue (`/admin/reports`) to delete or delete-and-mute for 24 hours; every report and moderation action is audited.
 - **T-A11-I2**: In the live demo, visitors read each other's messages.
   *Mitigation:* `hiddenFrom()` filters the room, conversations and live events; visitors only ever talk to synthetic attendees.
+
+### Asset A12: meetings and notes
+
+Code: `lib/meetings.js`, `routes/meetings.js`.
+
+- **T-A12-I1**: A meeting's place and time reach people not invited.
+  *Mitigation:* pins come from a per-user endpoint (`/meetings/pins.json`), never the shared map data; the page and live events go to invitees only. You can invite only people you could message (A11 rules), at most 8. `tests/e2e/meetings.test.js`.
+- **T-A12-I2**: Someone reads another person's private notes.
+  *Mitigation:* notes are keyed by (meeting, author) and only ever selected for the author. Stored in the clear, not end-to-end encrypted.
 
 ### Asset A10: live location
 

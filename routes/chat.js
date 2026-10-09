@@ -210,7 +210,10 @@ get("/messages/:userId", async (ctx) => {
       children: html`
         ${tabs("messages", user.id)}
         <section class="card chat-room">
-          <h1 class="thread-title">${name}</h1>
+          <div class="thread-head">
+            <h1 class="thread-title">${name}</h1>
+            ${allowed ? html`<a class="button button-small" href="/meetings/new?with=${otherId}">Invite to meet</a>` : ""}
+          </div>
           <ol class="chat-log" data-dm-log data-other="${otherId}">
             ${msgs.map(
               (

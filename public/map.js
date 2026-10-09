@@ -534,9 +534,25 @@
     c.addEventListener("pointercancel", endPointer);
     c.addEventListener("pointerleave", endPointer);
 
-    // Click background to close popup
+    // Click background to close popup, or report the spot in pick mode
+    // (map.onPick = (latlng) => ...). A drag is not a pick.
+    let downAt = null;
+    c.addEventListener("pointerdown", (e) => {
+      downAt = { x: e.clientX, y: e.clientY };
+    });
     c.addEventListener("click", (e) => {
-      if (e.target === c || e.target === self.tilesLayer) self._closePopup();
+      const onBackground =
+        e.target === c ||
+        e.target === self.overlayCanvas ||
+        (e.target instanceof Node && self.tilesLayer.contains(e.target));
+      if (!onBackground) return;
+      const moved = downAt ? Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) : 0;
+      if (self.onPick && moved < 8) {
+        const r = c.getBoundingClientRect();
+        self.onPick(self._pxToLatLng(e.clientX - r.left, e.clientY - r.top));
+        return;
+      }
+      self._closePopup();
     });
   };
 

@@ -131,6 +131,7 @@ export function renderShell(ctx) {
             <button type="button" class="chip" data-layer="group" aria-pressed="true"><span class="dot dot-group"></span>Groups</button>
             <button type="button" class="chip" data-layer="meetup" aria-pressed="true"><span class="dot dot-meetup"></span>Meetups</button>
             <button type="button" class="chip" data-layer="people" aria-pressed="true"><span class="dot dot-people"></span>People</button>
+            <button type="button" class="chip" data-layer="meeting" aria-pressed="true"><span class="dot dot-meeting"></span>Meetings</button>
             <button type="button" class="chip" data-layer="transit" aria-pressed="true"><span class="dot dot-transit"></span>Transit</button>
             <button type="button" class="chip" data-layer="traffic" aria-pressed="false"><span class="dot dot-traffic"></span>Traffic</button>
           </div>
@@ -145,6 +146,7 @@ export function renderShell(ctx) {
           <details class="shell-more">
             <summary class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">⋯</span><span>More</span></summary>
             <div class="shell-more-menu">
+              ${navItem("/meetings", "Meetings", "◇")}
               ${navItem("/arrivals", "Arrivals", "⇣")}
               ${navItem("/me", "Profile", "✎")}
               ${navItem("/trust", "Trust", "✓")}

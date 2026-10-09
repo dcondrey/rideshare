@@ -95,7 +95,12 @@ get("/people/:id", async (ctx) => {
           ${
             p.id !== user.id
               ? html`<p class="row">
-                  ${canMessage(user.id, p.id) ? html`<a class="button button-primary" href="/messages/${p.id}">Message</a>` : ""}
+                  ${
+                    canMessage(user.id, p.id)
+                      ? html`<a class="button button-primary" href="/messages/${p.id}">Message</a>
+                        <a class="button" href="/meetings/new?with=${p.id}">Invite to meet</a>`
+                      : ""
+                  }
                   <form method="post" action="/people/${p.id}/${hasBlocked(user.id, p.id) ? "unblock" : "block"}" class="inline">
                     <button class="button">${hasBlocked(user.id, p.id) ? "Unblock" : "Block"}</button>
                   </form>

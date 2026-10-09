@@ -194,6 +194,67 @@
     else if (current) close({ push: false });
   });
 
+  // "Pick on the map" (meeting form): tuck the panel away, take one tap on the
+  // map, write it into the form, and bring the panel back.
+  const pickBanner = document.createElement("div");
+  pickBanner.className = "pick-banner";
+  pickBanner.hidden = true;
+  const pickText = document.createElement("span");
+  pickText.textContent = "Tap the map to place the pin";
+  const pickCancel = document.createElement("button");
+  pickCancel.type = "button";
+  pickCancel.className = "button button-small";
+  pickCancel.textContent = "Cancel";
+  pickBanner.append(pickText, pickCancel);
+  document.body.append(pickBanner);
+  function endPick() {
+    pickBanner.hidden = true;
+    panel.classList.remove("is-picking");
+    if (window.RideshareMap) window.RideshareMap.map.onPick = null;
+  }
+  pickCancel.addEventListener("click", endPick);
+  body.addEventListener("click", (e) => {
+    const t = /** @type {Element} */ (e.target);
+    const pick = t.closest?.("[data-pick-on-map]");
+    const focus = t.closest?.("[data-focus-lat]");
+    const api = window.RideshareMap;
+    if (pick && api) {
+      const form = pick.closest("form");
+      panel.classList.add("is-picking");
+      pickBanner.hidden = false;
+      api.map.onPick = (ll) => {
+        form.querySelector('[name="lat"]').value = ll.lat.toFixed(6);
+        form.querySelector('[name="lng"]').value = ll.lng.toFixed(6);
+        const select = form.querySelector("[data-place-select]");
+        if (select) {
+          select.value = "custom";
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        const label = form.querySelector("[data-pick-label]");
+        if (label) label.textContent = `Picked ${ll.lat.toFixed(4)}, ${ll.lng.toFixed(4)}`;
+        api.map.clearMarkers((d) => d.layer === "pick");
+        api.map.addMarker({
+          lat: ll.lat,
+          lng: ll.lng,
+          color: "#ec4899",
+          label: "+",
+          size: 26,
+          layer: "pick",
+          zIndex: 990,
+          ariaLabel: "Picked spot",
+        });
+        endPick();
+      };
+    }
+    if (focus && api) {
+      api.map.setView(
+        { lat: Number(focus.dataset.focusLat), lng: Number(focus.dataset.focusLng) },
+        15,
+      );
+      close();
+    }
+  });
+
   // The More menu closes after a pick and on any click outside it.
   const more = document.querySelector(".shell-more");
   document.addEventListener("click", (e) => {
@@ -328,7 +389,7 @@
 
   // One stream for the whole page; panels subscribe here instead of opening
   // their own EventSource.
-  for (const type of ["chat", "dm"]) {
+  for (const type of ["chat", "dm", "meeting"]) {
     es.addEventListener(type, (e) => {
       const msg = JSON.parse(e.data);
       for (const fn of liveHandlers[type] || []) fn(msg);
@@ -397,6 +458,47 @@
     toast("dm", `/messages/${Number(m.from)}`, m.name, m.body);
   });
   chatNav?.addEventListener("click", () => chatNav.classList.remove("has-unread"));
+
+  // ── Meetings: your own pins (fetched per user, never in the shared data) ──
+  let meetingsVisible = true;
+  const meetingNodes = new Map();
+  function loadMeetings() {
+    fetch("/meetings/pins.json", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((pins) => {
+        const api = window.RideshareMap;
+        if (!api) return;
+        api.map.clearMarkers((d) => d.layer === "meeting" || d.layer === "pick");
+        meetingNodes.clear();
+        for (const m of pins) {
+          const node = api.map.addMarker({
+            lat: m.lat,
+            lng: m.lng,
+            color: "#ec4899",
+            label: "◇",
+            size: 26,
+            layer: "meeting",
+            zIndex: 950,
+            ariaLabel: `Meeting: ${m.title}`,
+            html: `<strong>${esc(m.title)}</strong><br>${esc(m.when)} · ${esc(m.place)}<br><a href="${esc(m.url)}">Open meeting</a>`,
+          });
+          node.hidden = !meetingsVisible;
+          meetingNodes.set(m.id, node);
+        }
+      })
+      .catch(() => {});
+  }
+  loadMeetings();
+  window.rideshareLive.on("meeting", (m) => {
+    loadMeetings();
+    if (m.kind === "invite")
+      toast("dm", `/meetings/${Number(m.meetingId)}`, "New meeting invite", m.title || "");
+  });
+  const meetingChip = document.querySelector('.shell-filters [data-layer="meeting"]');
+  meetingChip?.addEventListener("click", () => {
+    meetingsVisible = meetingChip.getAttribute("aria-pressed") === "true";
+    for (const n of meetingNodes.values()) n.hidden = !meetingsVisible;
+  });
 
   // The People chip covers both partners and synthetic attendees.
   const chip = document.querySelector('.shell-filters [data-layer="people"]');

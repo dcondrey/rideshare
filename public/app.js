@@ -54,6 +54,17 @@
       kindForm.addEventListener("change", sync);
       sync();
     }
+    // Meeting form: the custom-place fields only matter for "somewhere else".
+    const placeSelect = root.querySelector("[data-place-select]");
+    const customPlace = root.querySelector("[data-custom-place]");
+    if (placeSelect && customPlace && !placeSelect.dataset.enhanced) {
+      placeSelect.dataset.enhanced = "1";
+      const syncPlace = () => {
+        customPlace.hidden = placeSelect.value !== "custom";
+      };
+      placeSelect.addEventListener("change", syncPlace);
+      syncPlace();
+    }
     // OpenID4VP: poll a presentation request until a wallet answers it.
     const pending = root.querySelector("[data-oid4vp-status]");
     if (pending) {
