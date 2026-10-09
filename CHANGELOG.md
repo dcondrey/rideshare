@@ -19,6 +19,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Show the selective disclosure, OpenID4VC and DIDComm flows
 - Update changelog [skip ci]
 - Update changelog [skip ci]
@@ -58,6 +59,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Keep OpenID4VP results private and requests alive, drop the regex matcher
 - Move the base-image comment off the FROM line
 - Key map tiles per world copy and anchor pinch zoom on the midpoint
 - Report allowlist file progress without blocking or a modal
