@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Accept A256GCM and XC20P DIDComm anoncrypt, tour the new protocols
 - Make each deployment a DIDComm v2.1 agent
 - Add DIDComm v2.1 envelope encryption over X25519
 - Verify wallets over OpenID4VP and answer from the browser
@@ -19,6 +20,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Bring the README up to date; limit map zoom-out to country level
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Show the selective disclosure, OpenID4VC and DIDComm flows
 - Update changelog [skip ci]
