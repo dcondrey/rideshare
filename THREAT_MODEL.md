@@ -166,6 +166,8 @@ Origin, destination, departure time, seats, pairings, optional notes.
   *Mitigation:* readable only by the ride's poster and accepted riders, checked when the ride page renders and again for each live event (`notifyRide` in `lib/live.js`). The arrivals board aggregates counts per airport and hour with no names. Posting is rate-limited (20 per 10 minutes). Covered by `tests/e2e/groups.test.js`.
 - **T-A3-S2**: Strangers join a group (shared taxi or transit) without approval and get members' contacts.
   *Mitigation:* accepted as the point of groups; only allowlisted attendees can join, joins are audited (`group.joined`), and drivers' car offers still need approval.
+- **T-A3-I4**: A trip-safety link (`/trip/<token>`) leaks to someone other than the trusted contact.
+  *Mitigation:* the link is a bearer capability scoped to one person's view of one ride: route, departure time and that person's own updates, no names of others and no contacts. 192-bit random token, stored only as an HMAC; expires 12 hours after departure (between 6 hours and 7 days from creation); revocable from the ride page; at most 5 active per person per ride; creation rate-limited and audited. `Cache-Control: no-store`. Covered by `tests/e2e/safety.test.js`.
 - **T-A3-E1**: Stored XSS in a note.
   *Mitigation:* `html\`\`` auto-escape; CSP without `unsafe-inline`; no SVG uploads in the field. See [`docs/security/xss.md`](docs/security/xss.md).
 

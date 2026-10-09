@@ -16,9 +16,11 @@
  *   POST /me                     → save profile
  */
 
+import { config } from "../lib/config.js";
 import { db } from "../lib/db.js";
 import { onClaimCreated, onRideCreated } from "../lib/demo.js";
 import { errorMessage } from "../lib/errors.js";
+import { tripEstimate } from "../lib/estimates.js";
 import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
 import { notifyRide } from "../lib/live.js";
@@ -31,6 +33,8 @@ import {
   createClaim,
   createRide,
   decideClaim,
+  FEATURES,
+  featureList,
   getRide,
   latestRideUpdates,
   postRideUpdate,
@@ -43,6 +47,12 @@ import {
 } from "../lib/rides.js";
 import { get, post } from "../lib/router.js";
 import { aboutJsonLd, socialCard } from "../lib/seo.js";
+import {
+  activeTripShares,
+  createTripShare,
+  lookupTripShare,
+  revokeTripShare,
+} from "../lib/trip-share.js";
 import { trustBadgeFor } from "../lib/trust.js";
 import {
   hhmm,
@@ -131,6 +141,11 @@ function rideCard(ride, { showActions = true } = {}) {
         <div><dt>${isGroup(ride) ? "Places" : ride.kind === "offer" ? "Seats" : "Needs"}</dt><dd>${ride.seats}</dd></div>
         <div><dt>Posted by</dt><dd>${ride.poster_name || maskEmail(ride.poster_email)}</dd></div>
       </dl>
+      ${
+        featureList(ride.features).length
+          ? html`<ul class="feature-chips" aria-label="${ride.kind === "request" ? "Needs" : "Has"}">${featureList(ride.features).map((f) => html`<li>${FEATURES[f]}</li>`)}</ul>`
+          : ""
+      }
       ${ride.notes ? html`<p class="ride-card-notes">${ride.notes}</p>` : ""}
       ${showActions ? html`<a class="button" href="/rides/${ride.id}">View details</a>` : ""}
     </article>
@@ -159,12 +174,16 @@ get("/rides", async (ctx) => {
     ),
     airport: q.airport || "any",
     date: q.date || "any",
+    feature: /** @type {import("../lib/rides.js").Feature | 'any'} */ (
+      q.feature in FEATURES ? q.feature : "any"
+    ),
   };
   const rides = browseRides({
     kind: filters.kind === "any" ? "any" : filters.kind,
     direction: filters.direction === "any" ? "any" : filters.direction,
     airport: filters.airport === "any" ? "any" : filters.airport,
     date: filters.date === "any" ? "any" : filters.date,
+    feature: filters.feature,
   });
   ctx.html(
     layout({
@@ -205,6 +224,15 @@ get("/rides", async (ctx) => {
                   html`<option value="${a.code}" ${filters.airport === a.code ? "selected" : ""}>${a.code}</option>`,
               )}
               <option value="OTHER" ${filters.airport === "OTHER" ? "selected" : ""}>Other</option>
+            </select>
+          </label>
+          <label><span>Needs</span>
+            <select name="feature">
+              <option value="any">Anything</option>
+              ${Object.entries(FEATURES).map(
+                ([k, label]) =>
+                  html`<option value="${k}" ${filters.feature === k ? "selected" : ""}>${label}</option>`,
+              )}
             </select>
           </label>
           <label><span>Date</span>
@@ -324,6 +352,9 @@ post("/rides/new", async (ctx) => {
     pickupLat,
     pickupLng,
     mode,
+    features: /** @type {import("../lib/rides.js").Feature[]} */ (
+      Object.keys(FEATURES).filter((k) => body[`feature_${k}`] === "1")
+    ),
   });
   onRideCreated(id);
   ctx.redirect(`/rides/${id}`);
@@ -400,6 +431,13 @@ function postForm({ values = {} }) {
       <label><span>Seats <span class="muted">(offering: available; requesting: needed; group: places for others)</span></span>
         <input type="number" name="seats" min="1" max="8" value="1" required>
       </label>
+
+      <fieldset class="full feature-picks"><legend>Luggage and accessibility <span class="muted">(offer: you have room; request: you need it)</span></legend>
+        ${Object.entries(FEATURES).map(
+          ([k, label]) =>
+            html`<label class="check"><input type="checkbox" name="feature_${k}" value="1"> ${label}</label>`,
+        )}
+      </fieldset>
 
       <label class="full"><span>Notes <span class="muted">(optional)</span></span>
         <textarea name="notes" maxlength="500" rows="3"
@@ -675,8 +713,10 @@ get("/rides/:id", async (ctx) => {
                   </form>
                 </section>`
         }
+        ${estimateCard(ride)}
         ${groupMembersCard(ride, user.id)}
         ${tripStatusCard(ride, user.id)}
+        ${tripSafetyCard(ride, user.id)}
       `,
     }),
   );
@@ -761,6 +801,146 @@ function tripStatusCard(ride, viewerId) {
       </form>
     </section>`;
 }
+
+/**
+ * Cost split and CO2 saved, as an estimate.
+ * @param {{ id: number, kind: string, mode?: string, airport: string, seats: number }} ride
+ */
+function estimateCard(ride) {
+  const accepted = /** @type {{ n: number }} */ (
+    db
+      .prepare(
+        "SELECT COALESCE(SUM(seats), 0) AS n FROM claims WHERE ride_id = ? AND status = 'accepted'",
+      )
+      .get(ride.id)
+  ).n;
+  // Offers and groups: the poster plus everyone who joined, or a full car if
+  // nobody has yet. Requests: the rider plus a driver.
+  const people = ride.kind === "request" ? ride.seats + 1 : 1 + (accepted || ride.seats);
+  const e = tripEstimate(ride, people);
+  if (!e) return "";
+  return html`
+    <section class="card estimate">
+      <h2>Cost and CO2 <span class="sim-tag">Estimate</span></h2>
+      <dl class="estimate-grid">
+        <div><dt>Each pays about</dt><dd>$${e.costEach}</dd></div>
+        <div><dt>CO2 saved</dt><dd>${e.co2SavedKg} kg</dd></div>
+        <div><dt>Trip</dt><dd>${e.miles} mi · ${e.people} ${e.people === 1 ? "person" : "people"}</dd></div>
+      </dl>
+      <p class="muted small">Total about $${e.totalCost}: ${e.basis}. Rough figures to help you agree a split.</p>
+    </section>`;
+}
+
+/**
+ * Share-my-trip links for a trusted contact.
+ * @param {{ id: number }} ride @param {number} viewerId
+ */
+function tripSafetyCard(ride, viewerId) {
+  const people = rideParticipants(ride.id);
+  if (!people.has(viewerId) || people.size < 2) return "";
+  const shares = activeTripShares(ride.id, viewerId);
+  return html`
+    <section class="card" id="trip-safety">
+      <h2>Trip safety</h2>
+      <p class="muted">Send someone you trust a link to this trip: route, time and your own status updates. No account needed to open it. It stops working 12 hours after departure, or when you revoke it.</p>
+      ${
+        shares.length
+          ? html`<ul class="share-list">${shares.map(
+              (s) => html`<li>
+                <span>Link made ${new Date(s.created_at).toISOString().slice(0, 16).replace("T", " ")} UTC, expires ${new Date(s.expires_at).toISOString().slice(0, 16).replace("T", " ")} UTC</span>
+                <form method="post" action="/trip-shares/${s.id}/revoke" class="inline">
+                  <input type="hidden" name="ride" value="${ride.id}">
+                  <button class="button button-small">Revoke</button>
+                </form>
+              </li>`,
+            )}</ul>`
+          : ""
+      }
+      <form method="post" action="/rides/${ride.id}/share">
+        <button class="button">Create a share link</button>
+      </form>
+      <p class="muted small">Arrived? Post "Arrived" under Trip status so your contact sees it too.</p>
+    </section>`;
+}
+
+post("/rides/:id/share", async (ctx) => {
+  const user = requireUser(ctx);
+  if (!user) return;
+  if (!withinLimit(ctx, `trip-share:${user.id}`, 10)) return;
+  const rideId = parseInt(ctx.params.id, 10);
+  let share;
+  try {
+    share = createTripShare(rideId, user.id);
+  } catch (err) {
+    ctx.error(errorMessage(err), 403);
+    return;
+  }
+  const link = `${config.appUrl.replace(/\/$/, "")}/trip/${share.token}`;
+  ctx.res.setHeader("Cache-Control", "no-store");
+  ctx.html(
+    layout({
+      title: "Share your trip",
+      user,
+      children: html`
+        <section class="page-head"><a class="link" href="/rides/${rideId}#trip-safety">← Back to the ride</a></section>
+        <section class="card">
+          <h1>Share your trip</h1>
+          <p>Send this link to someone you trust. It's shown only once; make a new one if you lose it.</p>
+          <p><input class="share-link" type="text" readonly value="${link}" aria-label="Trip link"></p>
+          <p class="muted small">Expires ${new Date(share.expiresAt).toISOString().slice(0, 16).replace("T", " ")} UTC. Revoke it any time from the ride page.</p>
+        </section>`,
+    }),
+  );
+});
+
+post("/trip-shares/:id/revoke", async (ctx) => {
+  const user = requireUser(ctx);
+  if (!user) return;
+  const body = await ctx.formBody();
+  revokeTripShare(parseInt(ctx.params.id, 10), user.id);
+  const rideId = parseInt(body.ride ?? "", 10);
+  ctx.redirect(Number.isFinite(rideId) ? `/rides/${rideId}#trip-safety` : "/rides/mine");
+});
+
+// Public: what a trusted contact sees. No account; the token is the capability.
+get("/trip/:token", async (ctx) => {
+  const view = lookupTripShare(ctx.params.token);
+  ctx.res.setHeader("Cache-Control", "no-store");
+  if (!view) {
+    ctx.error("This trip link has expired or was revoked.", 404);
+    return;
+  }
+  const r = view.ride;
+  ctx.html(
+    layout({
+      title: "Trip",
+      user: null,
+      children: html`
+        <section class="card trip-view">
+          <h1>${view.sharerName}'s trip</h1>
+          <dl class="ride-card-meta">
+            <div><dt>Route</dt><dd>${airportName(r)} ${directionLabel(r.direction)}</dd></div>
+            <div><dt>Departs</dt><dd>${fmtDateTime(r.depart_date, r.depart_time)} (local time)</dd></div>
+            <div><dt>Travelling by</dt><dd>${isGroup(r) ? MODE_LABEL[r.mode] : r.kind === "offer" ? "Driving" : "Shared car"}</dd></div>
+            ${r.status === "cancelled" ? html`<div><dt>Status</dt><dd>Ride cancelled</dd></div>` : ""}
+          </dl>
+          <h2>Updates</h2>
+          ${
+            view.updates.length
+              ? html`<ul class="status-list">${view.updates.map(
+                  (u) => html`<li class="status-${u.status}">
+                    <span class="status-pill">${statusText(u)}</span>
+                    ${u.note ? html`<span>${u.note}</span>` : ""}
+                    <time class="muted small">${new Date(u.created_at).toISOString().slice(11, 16)} UTC</time>
+                  </li>`,
+                )}</ul>`
+              : html`<p class="muted">No updates yet.</p>`
+          }
+          <p class="muted small">Shared from the event rideshare. This page shows no contact details, and stops working ${new Date(view.expiresAt).toISOString().slice(0, 16).replace("T", " ")} UTC.</p>
+        </section>`,
+    }),
+  );
+});
 
 post("/rides/:id/status", async (ctx) => {
   const user = requireUser(ctx);

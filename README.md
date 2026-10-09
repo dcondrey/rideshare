@@ -248,6 +248,12 @@ Browsers can't share location in the background, so the page holds a Screen Wake
 - **Trip status.** People on a ride can post "running late (25 min)", "missed a connection", "arrived" and so on, with a note. Partners get it instantly as a toast on the map; nobody else sees it.
 - **Arrivals board** (`/arrivals`). People landing and leaving per airport and hour, with late and missed counts. Counts only, no names.
 
+### Cost, CO2, luggage and trip safety
+
+- **Cost and CO2.** Each ride page estimates the fare split and the CO2 saved by sharing (one car instead of several, or transit instead of cars). Straight-line distance times a road factor and flat rates, labeled as an estimate. Code: `lib/estimates.js`.
+- **Luggage and accessibility.** Rides can say they have room for big luggage, are wheelchair accessible, are quiet, or have a child seat (or that the rider needs one). Browse filters by it.
+- **Trip safety.** Anyone on a ride can create a link for a trusted contact: route, departure time and their own trip updates, with no account needed and no contact details shown. Links expire 12 hours after departure and can be revoked; only an HMAC of the token is stored. Code: `lib/trip-share.js`.
+
 ### Simulated transit and traffic
 
 The Transit layer shows an airport rail or express bus line from each airport to the venue, with vehicles moving on a timetable (some run a few minutes late). The Traffic layer is a heatmap of the airport routes with morning and evening peaks, and a scrubber previews the next 12 hours. Both are synthetic, computed in the browser from the clock, and labeled "Simulated" and "Modeled estimate" on the map. Real GTFS-realtime and traffic feeds would slot in here; none are wired up. Code: `public/layers.js`.
