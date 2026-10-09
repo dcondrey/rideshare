@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Make each deployment a DIDComm v2.1 agent
+- Add DIDComm v2.1 envelope encryption over X25519
 - Verify wallets over OpenID4VP and answer from the browser
 - Issue ride credentials to wallets over OpenID4VCI
 - Issue SD-JWT VCs with holder-chosen selective disclosure
@@ -17,6 +19,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
