@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Live location for ride partners and moving demo attendees on the map
 - Make the full-screen map the home screen, with slide-out panels
 - Accept A256GCM and XC20P DIDComm anoncrypt, tour the new protocols
 - Make each deployment a DIDComm v2.1 agent
@@ -21,6 +22,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Bring the README up to date; limit map zoom-out to country level
 - Update changelog [skip ci]
