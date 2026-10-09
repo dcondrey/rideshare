@@ -24,6 +24,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ### Documentation
 - Update changelog [skip ci]
 - Update changelog [skip ci]
+- Update changelog [skip ci]
 - Bring the README up to date; limit map zoom-out to country level
 - Update changelog [skip ci]
 - Update changelog [skip ci]
@@ -66,6 +67,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Rate-limit ride posts and claims, harden code-scanning findings, one trip per demo ghost
 - Keep OpenID4VP results private and requests alive, drop the regex matcher
 - Move the base-image comment off the FROM line
 - Key map tiles per world copy and anchor pinch zoom on the midpoint
