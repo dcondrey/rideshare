@@ -72,6 +72,7 @@ for (const name of [
   "map.js",
   "trust.js",
   "shell.js",
+  "layers.js",
   "favicon.svg",
   "robots.txt",
 ]) {

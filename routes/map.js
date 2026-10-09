@@ -130,6 +130,8 @@ export function renderShell(ctx) {
             <button type="button" class="chip" data-layer="group" aria-pressed="true"><span class="dot dot-group"></span>Groups</button>
             <button type="button" class="chip" data-layer="meetup" aria-pressed="true"><span class="dot dot-meetup"></span>Meetups</button>
             <button type="button" class="chip" data-layer="people" aria-pressed="true"><span class="dot dot-people"></span>People</button>
+            <button type="button" class="chip" data-layer="transit" aria-pressed="true"><span class="dot dot-transit"></span>Transit</button>
+            <button type="button" class="chip" data-layer="traffic" aria-pressed="false"><span class="dot dot-traffic"></span>Traffic</button>
           </div>
           ${config.demoMode ? html`<a href="/demo" class="shell-live"><span class="live-dot"></span>Live demo · tour</a>` : ""}
         </header>
@@ -152,6 +154,15 @@ export function renderShell(ctx) {
           <span class="share-dot" aria-hidden="true"></span><span class="share-label">Share my location</span>
         </button>
 
+        <section class="sim-card" id="sim-card" hidden aria-label="Simulated traffic">
+          <div class="sim-head"><strong>Traffic</strong><span class="sim-tag">Modeled estimate</span></div>
+          <label class="sim-range"><span class="sr-only">Time to preview</span>
+            <input type="range" id="sim-time" min="0" max="720" step="15" value="0">
+          </label>
+          <div class="sim-foot"><span id="sim-label">Now</span><span class="muted">Simulated, not live data</span></div>
+          <div class="sim-legend" aria-hidden="true"><span>Clear</span><i></i><span>Heavy</span></div>
+        </section>
+
         <aside id="panel" class="panel" hidden role="dialog" aria-modal="false" aria-labelledby="panel-title">
           <div class="panel-head">
             <button type="button" class="panel-grip" aria-label="Expand or shrink the panel"></button>
@@ -165,6 +176,7 @@ export function renderShell(ctx) {
         <script src="/map.js" defer></script>
         <script src="/trust.js" defer></script>
         <script src="/shell.js" defer></script>
+        <script src="/layers.js" defer></script>
       `,
     }),
   );

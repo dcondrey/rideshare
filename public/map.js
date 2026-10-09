@@ -113,6 +113,8 @@
     c.style.touchAction = "none"; // prevent browser pan/zoom hijack
 
     this.tilesLayer = el("div", "tm-tiles", c);
+    this.overlayCanvas = el("canvas", "tm-overlay", c);
+    this.overlays = [];
     this.markersLayer = el("div", "tm-markers", c);
     this.popupsLayer = el("div", "tm-popups", c);
     this.attrib = el("div", "tm-attrib", c);
@@ -344,7 +346,40 @@
   // ── Public API ─────────────────────────────────────────────────────────────
   TinyMap.prototype.render = function () {
     this._renderTiles();
+    this._renderOverlays();
     this._renderMarkers();
+  };
+
+  // ── Overlays: canvas drawing between tiles and pins ────────────────────────
+  // draw(ctx, toPx, size) runs on every render; toPx(lat, lng) → {x, y} in CSS px.
+  TinyMap.prototype.addOverlay = function (draw) {
+    this.overlays.push(draw);
+    this._renderOverlays();
+  };
+  TinyMap.prototype.redrawOverlays = function () {
+    this._renderOverlays();
+  };
+  TinyMap.prototype._renderOverlays = function () {
+    const cv = this.overlayCanvas;
+    if (!cv) return;
+    const s = this._size();
+    const w = Math.round(s.w * this._dpr);
+    const h = Math.round(s.h * this._dpr);
+    if (cv.width !== w || cv.height !== h) {
+      cv.width = w;
+      cv.height = h;
+      cv.style.width = `${s.w}px`;
+      cv.style.height = `${s.h}px`;
+    }
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
+    ctx.clearRect(0, 0, s.w, s.h);
+    const toPx = (lat, lng) => this._latLngToPx(lat, lng);
+    for (const draw of this.overlays) {
+      ctx.save();
+      draw(ctx, toPx, s);
+      ctx.restore();
+    }
   };
 
   TinyMap.prototype.setView = function (latlng, zoom) {

@@ -248,6 +248,10 @@ Browsers can't share location in the background, so the page holds a Screen Wake
 - **Trip status.** People on a ride can post "running late (25 min)", "missed a connection", "arrived" and so on, with a note. Partners get it instantly as a toast on the map; nobody else sees it.
 - **Arrivals board** (`/arrivals`). People landing and leaving per airport and hour, with late and missed counts. Counts only, no names.
 
+### Simulated transit and traffic
+
+The Transit layer shows an airport rail or express bus line from each airport to the venue, with vehicles moving on a timetable (some run a few minutes late). The Traffic layer is a heatmap of the airport routes with morning and evening peaks, and a scrubber previews the next 12 hours. Both are synthetic, computed in the browser from the clock, and labeled "Simulated" and "Modeled estimate" on the map. Real GTFS-realtime and traffic feeds would slot in here; none are wired up. Code: `public/layers.js`.
+
 <p align="center"><img src="docs/screenshots/map-shell-phone.png" alt="The map with a bottom-sheet panel on a phone" width="320"></p>
 
 <table>
