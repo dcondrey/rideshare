@@ -8,14 +8,14 @@ A non-feature is not a TODO. These are decisions, not gaps. Reopening any of the
 
 ## No native mobile app
 
-**Why not:** a Progressive Web App is sufficient for the use case. Adding a native app would add:
+**Why not:** a responsive, server-rendered web page is sufficient for the use case. Adding a native app would add:
 
 - App-store review surface (unrelated organisations approving our security model).
 - Two more codebases (iOS, Android), each with its own attack surface.
 - Push notifications, which require a third-party service that observes user activity.
 - A signing-key management story for app distribution that is non-trivial.
 
-**The PWA gives us:** add-to-home-screen, offline cache via service worker, geolocation, full UI control. Sufficient for an event.
+**The web page gives us:** it works on any phone browser with nothing to install, it can be added to a home screen, and every update ships on the next page load. There is no service worker or offline cache, and the app never asks for location (`Permissions-Policy: geolocation=()`). Sufficient for an event.
 
 ---
 

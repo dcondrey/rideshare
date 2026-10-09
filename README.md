@@ -7,6 +7,207 @@ Zero-dependency, self-hosted ride-sharing platform for conference attendees.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/dcondrey/rideshare/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/dcondrey/rideshare/codeql.yml?branch=main&style=flat-square&label=CodeQL)](https://github.com/dcondrey/rideshare/actions/workflows/codeql.yml) [![License](https://img.shields.io/github/license/dcondrey/rideshare?style=flat-square)](https://github.com/dcondrey/rideshare/blob/main/LICENSE)
 
+<p align="center">
+  <img src="docs/screenshots/browse.png" alt="The browse page of the live demo: a next-step card, a live activity feed, and ride offers and requests from other attendees" width="860">
+</p>
+
+Event Rideshare is a self-hosted ride board for conference attendees, and a
+working reference for **decentralized identifiers (DIDs) and W3C Verifiable
+Credentials** in an everyday product. Every deployment is its own `did:web`
+issuer. Every attendee holds a `did:key` they generated in their own browser.
+When two people confirm they shared a ride, both receive a signed
+`RideAttendanceCredential` that they keep, export, carry to the next event,
+and verify anywhere. There's no central registry, no wallet vendor and no
+dependencies: the whole trust layer is plain JavaScript on Node's built-in
+crypto and the browser's WebCrypto.
+
+## Try the live demo
+
+The demo runs as the **Internet Demo Workshop (IDW)**, a fictional demo
+unconference modeled on the Internet Identity Workshop ("Show me, don't tell
+me": no slide decks, bugs are celebrated). Sign-in is one click, and the
+landing page lists the accounts:
+
+| Account | Email | What you can do |
+|---|---|---|
+| Attendee | `attendee@demo.test` | Your own private sandbox: post rides, claim seats, create a DID, earn and verify a credential |
+| Organizer | `organizer@demo.test` | The admin dashboard, insights, allowlist, config and audit log, read-only |
+
+Everyone else on the board is a synthetic attendee. They post rides, ask for
+seats on yours, accept your claims within seconds to a minute, and confirm
+shared rides, so you can walk the whole flow alone:
+
+1. **Create your DID.** Your browser generates an Ed25519 `did:key` with
+   WebCrypto, stores the private key in IndexedDB, and proves control by
+   signing a one-time server challenge.
+2. **Confirm a ride.** You start with an accepted seat in a synthetic driver's
+   car. The driver has already confirmed it, so your confirmation completes
+   the pair.
+3. **Hold a credential.** Both sides are issued a VC-JWT signed by the
+   event's `did:web` key.
+4. **Verify it.** Paste it into the verifier at `/trust/verify`, or into any
+   VC-JWT tool that resolves `did:web`.
+
+**Run the demo locally** (uses its own database file, so it can't touch real data):
+
+```bash
+APP_URL=http://localhost:3000 \
+SESSION_SECRET=$(openssl rand -hex 32) ALLOWLIST_SALT=$(openssl rand -hex 32) \
+DEMO_MODE=true EVENT_CONFIG=event.config.demo.yaml \
+DATABASE_PATH=./data/demo.db DEPLOYMENT_KEY_PATH=./data/demo.key \
+npm start
+```
+
+**Host it on Render's free plan:** in Render, choose **New → Blueprint**,
+select this repository, and set the Blueprint path to `render.demo.yaml`.
+There is nothing else to fill in: the URL comes from Render's
+`RENDER_EXTERNAL_URL`, secrets are generated, and the issuer becomes
+`did:web:<service>.onrender.com`, resolvable by anyone. The free plan has no
+disk and sleeps when idle, so each wake-up is a fresh demo.
+
+`DEMO_MODE` opens sign-in to anyone. It refuses to start against a database
+that holds real attendees, and it makes the organizer account read-only.
+Never set it on a real event.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/landing.png" alt="Landing page with the two demo accounts and the IDW manifesto"></td>
+    <td width="50%"><img src="docs/screenshots/tour.png" alt="Guided demo tour with live progress checkmarks"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/ride-confirmed.png" alt="Ride page after confirming: dual-confirmed, two credentials issued"></td>
+    <td><img src="docs/screenshots/verify.png" alt="Verifier report: EdDSA, issuer, subject, issuer DID resolved, signature valid"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/map.png" alt="Map of ride pickup pins, meetup spots and the venue on OpenStreetMap tiles"></td>
+    <td><img src="docs/screenshots/admin.png" alt="Organizer dashboard with signup, match and demand metrics"></td>
+  </tr>
+</table>
+
+---
+
+## For the decentralized identity crowd
+
+### Identifiers
+
+| Party | DID method | Key | Where it lives |
+|---|---|---|---|
+| Deployment (issuer) | [`did:web`](https://w3c-ccg.github.io/did-method-web/) | Ed25519 | Private key in a file outside the database (`DEPLOYMENT_KEY_PATH`, or inline `DEPLOYMENT_KEY`), so backups carry no issuer key. DID document at `/.well-known/did.json` |
+| Attendee (holder/subject) | [`did:key`](https://w3c-ccg.github.io/did-method-key/) | Ed25519, multicodec `0xed01`, base58btc multibase `z6Mk…` | Generated in the browser with WebCrypto. The private key stays in IndexedDB; the user can download it as a JWK backup file and restore it on another device |
+
+The DID document a demo deployment serves. This is real output from a local
+run configured as `https://rideshare-demo.onrender.com`; your deployment's
+hostname and key will differ, and the demo's key changes on every restart:
+
+```json
+{
+  "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/multikey/v1"],
+  "id": "did:web:rideshare-demo.onrender.com",
+  "verificationMethod": [{
+    "id": "did:web:rideshare-demo.onrender.com#key-1",
+    "type": "Multikey",
+    "controller": "did:web:rideshare-demo.onrender.com",
+    "publicKeyMultibase": "z6MkfVPgeW2K1nW5FZnCiQNRQKAj8VpnjKL8vf9R6kSEPYAW"
+  }],
+  "assertionMethod": ["did:web:rideshare-demo.onrender.com#key-1"],
+  "authentication": ["did:web:rideshare-demo.onrender.com#key-1"],
+  "service": [{
+    "id": "did:web:rideshare-demo.onrender.com#rideshare",
+    "type": "EventRideshareTrust",
+    "serviceEndpoint": "https://rideshare-demo.onrender.com"
+  }]
+}
+```
+
+**Binding a DID to an account** is a challenge-response, so nobody can claim a
+key they don't hold: the server issues a single-use, five-minute
+`rideshare-bind:<uuid>` challenge, the browser signs it with the `did:key`, and
+the server verifies the Ed25519 signature before recording the binding.
+
+### Credentials
+
+Issuance is gated on **dual confirmation**: after the trip, both the driver and
+the rider tap "I made this ride". Then the deployment signs one credential per
+side, each naming the holder as subject and the other side as `counterpart`.
+If a participant binds their DID only after confirming, the credential is
+issued at bind time.
+
+A credential issued by that same local run, decoded (JOSE header, then
+payload). Its issuer key no longer exists, so it is for reading, not verifying:
+
+```json
+{ "alg": "EdDSA", "typ": "vc+jwt", "kid": "did:web:rideshare-demo.onrender.com#key-1" }
+```
+
+```json
+{
+  "iss": "did:web:rideshare-demo.onrender.com",
+  "sub": "did:key:z6MkghGtr7XD79JpirJUSVenpeAAqL8YajmYCNPwVz1A5saB",
+  "nbf": 1791513927,
+  "iat": 1791513927,
+  "jti": "urn:uuid:27abf7d7-ea5f-4d3d-8d13-c7a12b498228",
+  "vc": {
+    "@context": ["https://www.w3.org/ns/credentials/v2"],
+    "id": "urn:uuid:27abf7d7-ea5f-4d3d-8d13-c7a12b498228",
+    "type": ["VerifiableCredential", "RideAttendanceCredential"],
+    "issuer": "did:web:rideshare-demo.onrender.com",
+    "validFrom": "2026-10-09T02:45:27.395Z",
+    "credentialSubject": {
+      "id": "did:key:z6MkghGtr7XD79JpirJUSVenpeAAqL8YajmYCNPwVz1A5saB",
+      "type": "RideParticipant",
+      "role": "driver",
+      "counterpart": "did:key:z6MkvEZ4r91r7cTr8bGxBj9ZsFjzQ4wynFp3BCFFnE4XEuAN",
+      "ride": { "date": "2026-10-23", "time": "06:00", "airport": "OAK", "direction": "to_venue" },
+      "event": { "name": "IDW", "startDate": "2026-10-23", "endDate": "2026-10-25" }
+    }
+  }
+}
+```
+
+### Portability and verification
+
+- **Export** every credential from `/trust` as single JWTs or one JSON bundle.
+- **Import** them on any other deployment. It checks that the subject is the
+  importer's bound DID, resolves each issuer's `did:web` document over HTTPS
+  through an SSRF-hardened fetch (no private addresses, no redirects, size and
+  time caps), verifies the EdDSA signature, checks `nbf`/`exp`, and re-verifies
+  imported credentials in the background so a rotated or retired issuer key
+  stops counting.
+- **Trust badges** on ride cards show how many confirmed rides a poster holds,
+  across how many issuers, without revealing who they rode with.
+- **The verifier** at `/trust/verify` needs no account and works on
+  credentials from any deployment. It reports every check it ran, by name.
+- **Privacy:** a DID is a bare public key with no email, name or attendance
+  history in it. Credentials name the counterpart's DID, never their email or
+  name, and the holder chooses which credentials to present elsewhere.
+
+### Standards, and exactly how closely they're followed
+
+| Concern | Spec | Status |
+|---|---|---|
+| DID syntax and documents | [DID Core](https://www.w3.org/TR/did-core/) | Followed. `Multikey` verification method with `publicKeyMultibase` |
+| Issuer identifier | `did:web` | Followed for minting, including `%3A` port encoding. **Deviation:** resolution refuses any port other than 443 (an SSRF guard), so a `did:web:host%3A8443` issuer can't be verified by another deployment. A deployment verifies its own credentials against its local key, with no network round trip |
+| Holder identifier | `did:key` (Ed25519) | Followed. Encoding covered by `tests/unit/crypto-did-key.test.js` |
+| Data model | [VC Data Model 2.0](https://www.w3.org/TR/vc-data-model-2.0/) | Followed: v2 context, `validFrom`. App terms resolve through the v2 context's `@vocab` |
+| Securing | VC-JWT, EdDSA ([RFC 8032](https://www.rfc-editor.org/rfc/rfc8032)) | **Deviation:** VC-JWT 1.1 shape, with the credential in a `vc` claim next to `iss`/`sub`/`nbf`/`jti`, while the header says `typ: vc+jwt`, the [VC-JOSE-COSE](https://www.w3.org/TR/vc-jose-cose/) media type, whose payload is the bare credential. A strict VC-JOSE-COSE verifier will see that mismatch; it has to read the `vc` claim to accept these |
+| Signatures | Ed25519 | Node's built-in `crypto`, verified against RFC 8032 test vectors |
+
+**Not implemented (yet):** status lists or any revocation, Verifiable
+Presentations, selective disclosure (SD-JWT, BBS), Data Integrity proofs,
+OpenID4VCI/OpenID4VP issuance and presentation, DIDComm, and external wallet
+integration. Credentials carry no `exp`, and a deployment publishes a single
+key, so rotating it makes every earlier credential unverifiable. The
+[TRUST.md](./TRUST.md) roadmap covers counter-signed credentials (the
+counterpart co-signs with their `did:key`, so the event alone can't fabricate
+a ride), BBS+ proofs and status lists. If you are testing interop at an event
+like IDW, these are the gaps you'll hit first; issues and patches are welcome.
+
+Protocol details, the threat table and implementation file map are in
+[TRUST.md](./TRUST.md); the forgery analysis is in
+[docs/security/credential-forgery.md](./docs/security/credential-forgery.md).
+
+---
+
 ## Why does this exist?
 
 Every conference has the same problem: hundreds of attendees flying into the same airports, heading to the same venue, on the same dates, and nobody coordinates. People pay for solo rideshares, miss connections, and waste money.
@@ -37,12 +238,13 @@ Event Rideshare gives organizers a private, self-hosted coordination tool they c
 | **Zero dependencies** | No `npm install`. Just Node >=22.5 and a single process. No build step. |
 | **Self-contained** | One Node process + one SQLite file. Nothing else to provision. |
 | **Privacy-first** | The invite allowlist is stored as one-way HMAC hashes. No trackers. No third-party JS. Aggregate-only analytics with k-anonymity. |
-| **Interactive map** | Custom slippy-map renderer (12KB vanilla JS). Pan, zoom, pinch, markers with popups. Five tile styles built in. |
-| **Portable trust** | W3C Verifiable Credentials: confirmed rides mint VCs that travel with users across events. Each deployment is a `did:web` issuer; each user is a `did:key` holder. See [TRUST.md](./TRUST.md). |
+| **Interactive map** | Custom slippy-map renderer (vanilla JS, no library). Pan, zoom, pinch, markers with popups. OpenStreetMap tiles by default, keyed providers optional. |
+| **Portable trust** | Confirmed rides mint W3C Verifiable Credentials (VC 2.0 data model, VC-JWT, EdDSA) that holders carry across events. Each deployment is a `did:web` issuer; each user is a browser-generated `did:key` holder. See [above](#for-the-decentralized-identity-crowd) and [TRUST.md](./TRUST.md). |
+| **Live demo mode** | `DEMO_MODE=true` adds one-click demo accounts, synthetic attendees who react to you, and a guided tour. See [Try the live demo](#try-the-live-demo). |
 | **One-click deploy** | Docker, Railway, Render, Fly.io, or any VPS. |
 | **Event-agnostic** | Name, dates, venue, airports, brand color, logo, meetup pins, all configurable in one YAML file or live via the admin UI. |
 | **Admin dashboard** | Allowlist management, event config editor, insights with CSV export, audit log, meetup/logo management. |
-| **Dark mode** | Automatic, based on system preference. |
+| **Dark mode and theming** | Automatic dark mode, a brand color, and an optional per-event stylesheet (`brand.stylesheet`). |
 
 ---
 
@@ -118,8 +320,6 @@ docker run --rm -v rideshare-data:/data -v $PWD:/out alpine \
 
 ### Railway
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/YOUR-TEMPLATE-ID)
-
 1. Add a **Volume** mounted at `/data`.
 2. Set environment variables in the Railway UI:
 
@@ -135,7 +335,7 @@ docker run --rm -v rideshare-data:/data -v $PWD:/out alpine \
 
 ### Render
 
-Push to GitHub, then in Render: **New > Blueprint** and point at this repo. The included `render.yaml` provisions the service, a 1GB disk for SQLite, and prompts for secrets.
+Push to GitHub, then in Render: **New > Blueprint** and point at this repo. The included `render.yaml` provisions the service, a 1GB disk for SQLite, and prompts for secrets. For a public demo instead of a real event, use `render.demo.yaml` (see [Try the live demo](#try-the-live-demo)).
 
 ### Fly.io
 
@@ -203,7 +403,7 @@ meetups:
     lng: -122.0822
 
 map:
-  style: voyager
+  style: osm
   defaultZoom: 11
   customTileUrl: ""
   customAttribution: ""
@@ -220,18 +420,27 @@ supportEmail: support@example.com
 
 ### Logo
 
-Upload via the admin UI at `/admin/config` (stored in DB, max 200KB; SVG/PNG/WebP/JPEG, served from `/logo`), or drop a file in `public/` and set `brand.logoPath` in config. Upload takes priority.
+Upload via the admin UI at `/admin/config` (stored in the DB, max 200KB; PNG/WebP/JPEG, served from `/logo`), or drop a file in `public/` and set `brand.logoPath: /static/<file>` in config. Upload takes priority. The logo also appears above the event name on the landing page.
+
+### Theme
+
+`brand.primaryColor` sets the accent color. For a fuller theme, drop a stylesheet in `public/` and set `brand.stylesheet: /static/<file>.css`; it loads after the built-in CSS on every page and can override any of its custom properties. `public/idw-theme.css`, the demo's black, white and phosphor-green theme, is a worked example.
 
 ### Map styles
 
-| Style | Look | API Key |
+| Style | Look | API key |
 |---|---|---|
-| **`voyager`** (default) | Flat retro warm palette | No |
-| `positron` | Bright minimal grayscale | No |
-| `dark-matter` | Dark retro (matches dark mode) | No |
-| `toner-lite` | Black and white | Stadia (may need key) |
-| `osm` | Classic OpenStreetMap | No |
+| **`osm`** (default) | Classic OpenStreetMap | No |
+| `voyager` | Flat retro warm palette (CARTO) | CARTO key |
+| `positron` | Bright minimal grayscale (CARTO) | CARTO key |
+| `dark-matter` | Dark retro (CARTO) | CARTO key |
+| `toner-lite` | Black and white (Stadia) | Stadia key off localhost |
 | `custom` | Your own tile URL | Depends on provider |
+
+CARTO's basemaps now return an "API key required" placeholder tile to keyless
+requests, which is why `osm` is the default. Tile images are requested with the
+page origin as `Referer`, as the OpenStreetMap tile usage policy asks; a busy
+event should use its own tile provider through `custom`.
 
 For Mapbox, MapTiler, or other paid providers, choose `custom` and set `map.customTileUrl` and `map.customAttribution`.
 
@@ -255,7 +464,7 @@ The CSV is never written to disk. Each email is normalized (lowercase, trimmed, 
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `APP_URL` | Yes | | Public URL the app is served from |
+| `APP_URL` | Yes | | Public URL the app is served from. On Render, defaults to `RENDER_EXTERNAL_URL` |
 | `SESSION_SECRET` | Yes | | 32-byte hex; signs sessions and magic links |
 | `ALLOWLIST_SALT` | Yes | | 32-byte hex; HMAC key for attendee emails |
 | `ADMIN_EMAILS` | Yes | | Comma-separated admin email addresses |
@@ -268,6 +477,11 @@ The CSV is never written to disk. Each email is normalized (lowercase, trimmed, 
 | `TRUST_PROXY` | | `false` | Set `true` behind a reverse proxy |
 | `MAGIC_LINK_RATE_LIMIT` | | `5` | Max sign-in emails per address per hour |
 | `SESSION_LIFETIME_DAYS` | | `14` | Session cookie lifetime |
+| `DEPLOYMENT_KEY_PATH` | | `./secrets/deployment.key` | Issuer signing key file, created on first boot. Back it up separately from the database |
+| `DEPLOYMENT_KEY` | | | The key file's contents inline, for hosts with no persistent disk. Takes precedence over the path |
+| `EVENT_CONFIG` | | | Event config file to load instead of `event.config.yaml`, e.g. `event.config.demo.yaml` |
+| `DEMO_MODE` | | `false` | Live-demo mode: one-click demo accounts and synthetic attendees. Never on a real event |
+| `ALLOW_INSECURE_DID_WEB` | | `false` | Lets `did:web` resolve over plain HTTP for `localhost` only, for local cross-deployment testing |
 
 </details>
 
@@ -303,58 +517,75 @@ Pull the latest source, restart the process. Schema migrations are forward-compa
 .
 ├── server.js                 # HTTP server, graceful shutdown
 ├── event.config.example.yaml # Event config template (copy to event.config.yaml)
+├── event.config.demo.yaml    # The live demo's fictional event (IDW)
 ├── lib/
 │   ├── config.js             # Env + YAML/JSON config loader
-│   ├── db.js                 # SQLite schema, migrations, queries
+│   ├── event-schema.js       # Event config validation at boot
+│   ├── event-config.js       # File defaults + DB overrides
+│   ├── db.js                 # SQLite schema, migrations, audit log
 │   ├── auth.js               # Magic-link auth + sessions
 │   ├── rides.js              # Ride + claim business logic
 │   ├── allowlist.js          # CSV parsing, hashed allowlist
-│   ├── trust.js              # DID/VC issuance + verification
-│   ├── vc.js                 # JWT signing/verification, JWS
-│   ├── did.js                # DID generation + resolution
-│   ├── crypto.js             # Ed25519, HMAC-SHA256, base58
+│   ├── trust.js              # DID binding, ride confirmation, VC issuance + import
+│   ├── vc.js                 # VC-JWT signing and verification
+│   ├── did.js                # did:key / did:web encoding, resolution, Ed25519
+│   ├── keys.js               # Issuer key custody outside the database
+│   ├── safe-fetch.js         # SSRF-hardened outbound fetch for did:web
+│   ├── crypto.js             # HMAC, constant-time compare, tokens, email normalization
+│   ├── demo.js               # Synthetic attendees and live-demo behavior
 │   ├── email.js              # Resend HTTP + SMTP client
-│   ├── router.js             # HTTP router + middleware
-│   ├── html.js               # Auto-escaping HTML templates
+│   ├── router.js             # HTTP router, CSRF, security headers
+│   ├── html.js               # Auto-escaping HTML templates + layout
 │   ├── validate.js           # Input validation
 │   ├── rate-limit.js         # In-memory token bucket
 │   ├── insights.js           # Privacy-safe aggregate metrics
+│   ├── log.js                # Structured logging with a field allowlist
+│   ├── seo.js                # JSON-LD and social cards
+│   ├── banner.js             # Site-wide operator banner
 │   ├── yaml.js               # Minimal YAML parser
-│   ├── assets.js             # Logo upload/sanitization
+│   ├── assets.js             # Logo upload
 │   ├── meetups.js            # Meetup CRUD
 │   ├── map-styles.js         # Tile-style catalogue
-│   └── event-config.js       # File defaults + DB overrides
+│   └── errors.js
 ├── routes/
 │   ├── auth.js               # Sign-in, magic link, sign-out
+│   ├── demo.js               # Demo sign-in, tour, activity feed
 │   ├── rides.js              # Browse, create, claim, manage
 │   ├── admin.js              # Dashboard, allowlist, config, audit
 │   ├── map.js                # Interactive map
-│   ├── trust.js              # DID binding, VC issuance, verifier
+│   ├── trust.js              # DID binding, credentials, verifier
 │   ├── well-known.js         # /.well-known/did.json
-│   └── static.js             # CSS, JS, fonts, favicon
+│   ├── health.js             # /health
+│   └── static.js             # CSS, JS, images
 ├── public/
 │   ├── styles.css            # Responsive UI + dark mode
 │   ├── app.js                # Progressive enhancement
 │   ├── map.js                # Custom slippy-map renderer
-│   ├── trust.js              # Client-side DID/VC management
+│   ├── trust.js              # In-browser did:key generation, signing, import
+│   ├── idw-theme.css         # Demo theme (example of brand.stylesheet)
+│   ├── idw-logo.png          # Demo logo
 │   ├── favicon.svg
 │   └── robots.txt
-├── tests/                    # 18 test files, unit + integration
+├── scripts/                  # Backup, allowlist import, demo seeding, CI gates
+├── tests/                    # Unit, e2e and RFC 8032 / base58 vectors (node --test)
 ├── docs/
+│   ├── screenshots/
 │   ├── code-reading-guide.md
 │   ├── intentional-non-features.md
-│   └── security/             # XSS, CSRF, SSRF, timing deep-dives
-├── Dockerfile                # Single-stage, ~70MB, non-root
+│   └── security/             # XSS, CSRF, SSRF, timing, forgery, audit deep-dives
+├── Dockerfile                # Single-stage, non-root
 ├── docker-compose.yml
 ├── railway.json
-├── render.yaml
+├── render.yaml               # Real event on Render (starter plan + disk)
+├── render.demo.yaml          # Public demo on Render (free plan)
 ├── fly.toml
-├── biome.json                # Lint + format rules
-├── .github/workflows/ci.yml  # Tests, lint, type-check, security
-├── SECURITY.md               # Threat model + mitigations
+├── biome.jsonc               # Lint + format rules
+├── .github/workflows/        # CI, CodeQL, changelog
+├── SECURITY.md               # Security policy + mitigations
+├── THREAT_MODEL.md           # STRIDE analysis
 ├── TRUST.md                  # Portable trust protocol spec
 ├── RUNBOOK.md                # Operations + troubleshooting
-├── CONTRIBUTING.md            # How to contribute
+├── CONTRIBUTING.md           # How to contribute
 └── CHANGELOG.md
 ```
 
@@ -373,20 +604,6 @@ This is a deliberate architectural choice, not a stunt.
 - **Auditability.** Every line of code is in this repo. Reviewers can read it all in an afternoon.
 
 The tradeoffs are real (hand-rolled SMTP client, custom YAML parser, custom map renderer) but intentional. Each is <300 lines, tested, and does exactly what this app needs.
-
----
-
-## Portable trust
-
-Event Rideshare implements a decentralized trust system using W3C standards:
-
-- Each deployment has a **`did:web`** identity (anchored at `/.well-known/did.json`).
-- Each user generates a **`did:key`** (Ed25519) in their browser. The private key stays in IndexedDB.
-- Confirmed rides mint **W3C Verifiable Credentials** (compact JWT, EdDSA-signed).
-- Users carry credentials to other deployments, where signatures are verified against the original issuer's DID document.
-- A public verifier playground at `/trust/verify` lets anyone inspect any credential.
-
-No central registry. No proprietary format. No lock-in. See [TRUST.md](./TRUST.md) for the full protocol specification.
 
 ---
 

@@ -33,6 +33,15 @@ self-hostable**. No central registry, no proprietary format, no lock-in.
 | Credential format | [VC-JWT (W3C)](https://www.w3.org/TR/vc-jwt/) | Compact JWT, `typ: vc+jwt` |
 | Signing | EdDSA (RFC 8032) | Ed25519, 64-byte signatures |
 
+The encoding is the VC-JWT 1.1 shape: the credential sits in a `vc` claim
+beside the registered JWT claims (`iss`, `sub`, `nbf`, `iat`, `jti`), and the
+credential body uses the VC 2.0 vocabulary (`@context`
+`https://www.w3.org/ns/credentials/v2`, `validFrom`). The app-specific terms
+(`RideAttendanceCredential`, `RideParticipant`, `ride`, `event`) are covered by
+the VC 2.0 context's `@vocab`, so no extra context URL is needed. A strict
+VC-JOSE-COSE 2.0 verifier expects the credential itself as the JWT payload with
+no `vc` wrapper; such a verifier needs to read the `vc` claim to accept these.
+
 We deliberately use **VC-JWT** (compact JWT form) over VC-LD with Data Integrity
 proofs because:
 
@@ -42,8 +51,10 @@ proofs because:
 
 ## The deployment's identity (`did:web`)
 
-On first boot, the server generates a fresh Ed25519 keypair and stores it in
-the `signing_keys` table (one row, `id = 1`). The DID is derived from the
+On first boot, the server generates a fresh Ed25519 keypair and writes the
+private key to a file outside the database (`DEPLOYMENT_KEY_PATH`, default
+`secrets/deployment.key`, or inline via `DEPLOYMENT_KEY`; see `lib/keys.js`),
+so a database backup carries no issuer key. The DID is derived from the
 public URL of the deployment:
 
 ```
@@ -131,8 +142,7 @@ Example credential payload (decoded):
   "jti": "urn:uuid:c1b9...",
   "vc": {
     "@context": [
-      "https://www.w3.org/ns/credentials/v2",
-      "https://eventrideshare.org/contexts/v1"
+      "https://www.w3.org/ns/credentials/v2"
     ],
     "id": "urn:uuid:c1b9...",
     "type": ["VerifiableCredential", "RideAttendanceCredential"],
@@ -262,4 +272,5 @@ Things explicitly NOT in v1 but designed to be addable:
 | `routes/trust.js` | `/trust`, bind/import endpoints, verifier playground |
 | `public/trust.js` | Browser DID:key gen, IndexedDB, signing, import UI |
 
-All files together are about 1,000 lines of JavaScript. No external libraries.
+All of it is plain JavaScript on Node's built-in `crypto` and the browser's
+WebCrypto. No external libraries.
