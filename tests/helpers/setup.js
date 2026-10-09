@@ -30,10 +30,22 @@ const TEST_DEFAULTS = {
   DEPLOYMENT_KEY_PATH: join(KEY_DIR, "deployment.key"),
 };
 
+// Always cleared, never inherited: a developer's shell or .env carrying a real
+// key would otherwise send live mail from the suite. An empty string also stops
+// lib/config.js's .env loader from filling these in. Tests that need a
+// transport opt in through setupTestEnv/startTestServer overrides.
+const EMAIL_TRANSPORT_CLEARED = {
+  RESEND_API_KEY: "",
+  SMTP_HOST: "",
+  SMTP_USER: "",
+  SMTP_PASS: "",
+};
+
 for (const [k, v] of Object.entries(TEST_DEFAULTS)) {
   if (!process.env[k]) process.env[k] = v;
 }
+Object.assign(process.env, EMAIL_TRANSPORT_CLEARED);
 
 export function setupTestEnv(overrides = {}) {
-  Object.assign(process.env, TEST_DEFAULTS, overrides);
+  Object.assign(process.env, TEST_DEFAULTS, EMAIL_TRANSPORT_CLEARED, overrides);
 }
