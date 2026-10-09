@@ -43,6 +43,17 @@
       if (!el || el.dataset.enhanced) return null;
       return el;
     };
+    // Post form: "The group will…" only matters when starting a group.
+    const groupOnly = root.querySelector("[data-group-only]");
+    const kindForm = groupOnly?.closest("form");
+    if (groupOnly && kindForm && !kindForm.dataset.groupEnhanced) {
+      kindForm.dataset.groupEnhanced = "1";
+      const sync = () => {
+        groupOnly.hidden = kindForm.querySelector('input[name="kind"]:checked')?.value !== "group";
+      };
+      kindForm.addEventListener("change", sync);
+      sync();
+    }
     // OpenID4VP: poll a presentation request until a wallet answers it.
     const pending = root.querySelector("[data-oid4vp-status]");
     if (pending) {

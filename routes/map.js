@@ -127,6 +127,7 @@ export function renderShell(ctx) {
           <div class="shell-filters" role="group" aria-label="Show on the map">
             <button type="button" class="chip" data-layer="offer" aria-pressed="true"><span class="dot dot-offer"></span>Offers</button>
             <button type="button" class="chip" data-layer="request" aria-pressed="true"><span class="dot dot-request"></span>Requests</button>
+            <button type="button" class="chip" data-layer="group" aria-pressed="true"><span class="dot dot-group"></span>Groups</button>
             <button type="button" class="chip" data-layer="meetup" aria-pressed="true"><span class="dot dot-meetup"></span>Meetups</button>
             <button type="button" class="chip" data-layer="people" aria-pressed="true"><span class="dot dot-people"></span>People</button>
           </div>
@@ -136,6 +137,7 @@ export function renderShell(ctx) {
         <nav class="shell-nav" aria-label="Primary">
           ${navItem("/rides", "Rides", "≡")}
           ${navItem("/rides/mine", "Mine", "◎")}
+          ${navItem("/arrivals", "Arrivals", "⇣")}
           ${navItem("/trust", "Trust", "✓")}
           ${navItem("/verify", "Verify", "⌕")}
           ${navItem("/trust/didcomm", "DIDComm", "⇄")}

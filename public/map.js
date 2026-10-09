@@ -619,7 +619,7 @@
       zoom: data.zoom,
     });
 
-    const STATIC = new Set(["venue", "meetup", "offer", "request"]);
+    const STATIC = new Set(["venue", "meetup", "offer", "request", "group"]);
     function draw(data) {
       // Live layers (people on the move) are owned by public/shell.js.
       map.clearMarkers((d) => STATIC.has(d.layer));
@@ -675,12 +675,20 @@
       Object.keys(byKey).forEach((k) => {
         const rides = byKey[k];
         const first = rides[0];
-        const color = first.kind === "offer" ? "#16a34a" : "#0ea5e9";
+        const color =
+          first.kind === "group" ? "#a855f7" : first.kind === "offer" ? "#16a34a" : "#0ea5e9";
         const label = rides.length > 1 ? String(rides.length) : "";
         const html = rides
           .map((r) => {
             const dir = r.direction === "to_venue" ? "→ to venue" : "← from venue";
-            const k2 = r.kind === "offer" ? "Offering" : "Looking for";
+            const k2 =
+              r.kind === "group"
+                ? r.mode === "transit"
+                  ? "Transit group"
+                  : "Taxi share"
+                : r.kind === "offer"
+                  ? "Offering"
+                  : "Looking for";
             return (
               '<div class="tm-popup-ride">' +
               "<strong>" +
@@ -694,7 +702,7 @@
               escapeHtml(r.time) +
               " · " +
               r.seats +
-              " seat" +
+              (r.kind === "group" ? " place" : " seat") +
               (r.seats === 1 ? "" : "s") +
               "</span>" +
               (r.source ? `<br><span class="muted">From: ${escapeHtml(r.source)}</span>` : "") +
@@ -712,7 +720,7 @@
           label: label,
           size: 26,
           layer: first.kind,
-          ariaLabel: `${rides.length} ${first.kind === "offer" ? "ride offer" : "ride request"}${rides.length === 1 ? "" : "s"}`,
+          ariaLabel: `${rides.length} ${first.kind === "group" ? "group" : first.kind === "offer" ? "ride offer" : "ride request"}${rides.length === 1 ? "" : "s"}`,
           html: html,
         });
       });

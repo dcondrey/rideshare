@@ -242,6 +242,12 @@ Panels have real URLs (`/?panel=/rides/12`), so links, reload and back work, and
 
 Browsers can't share location in the background, so the page holds a Screen Wake Lock while sharing. In the demo, synthetic attendees (grey pins, labeled as synthetic) drive between the airports and the venue. Code: `lib/live.js`, `routes/live.js`.
 
+### Groups, trip status and the arrivals board
+
+- **Groups.** No car? Start a group to split a taxi or ride transit together. Anyone can join until it's full, no approval needed, and members see each other's contacts. Groups get purple pins and their own filter.
+- **Trip status.** People on a ride can post "running late (25 min)", "missed a connection", "arrived" and so on, with a note. Partners get it instantly as a toast on the map; nobody else sees it.
+- **Arrivals board** (`/arrivals`). People landing and leaving per airport and hour, with late and missed counts. Counts only, no names.
+
 <p align="center"><img src="docs/screenshots/map-shell-phone.png" alt="The map with a bottom-sheet panel on a phone" width="320"></p>
 
 <table>

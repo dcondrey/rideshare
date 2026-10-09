@@ -1789,3 +1789,171 @@ fieldset legend {
 		font-size: 0.85rem;
 	}
 }
+
+/* ── Groups, trip status, arrivals board ─────────────────────────────────── */
+.badge-group {
+	background: color-mix(in srgb, #a855f7 18%, transparent);
+	color: color-mix(in srgb, #a855f7 75%, black);
+}
+.dot-group {
+	background: #a855f7;
+}
+.member-list,
+.status-list {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 1rem;
+	display: grid;
+	gap: 0.5rem;
+}
+.member-list li,
+.status-list li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.25rem 0.6rem;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid var(--border);
+}
+.status-pill {
+	padding: 0.1rem 0.55rem;
+	border-radius: 999px;
+	font-size: 0.8rem;
+	font-weight: 600;
+	background: var(--surface-2);
+}
+.status-late .status-pill {
+	background: color-mix(in srgb, #ffb000 30%, transparent);
+}
+.status-missed .status-pill {
+	background: color-mix(in srgb, #ff3b30 25%, transparent);
+}
+.status-arrived .status-pill,
+.status-on_time .status-pill {
+	background: color-mix(in srgb, var(--success) 22%, transparent);
+}
+.status-early .status-pill {
+	background: color-mix(in srgb, var(--info) 22%, transparent);
+}
+.status-choices {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	border: 0;
+	padding: 0;
+	margin: 0;
+}
+.chip-radio {
+	position: relative;
+}
+.chip-radio input {
+	position: absolute;
+	opacity: 0;
+	inset: 0;
+}
+.chip-radio span {
+	display: inline-block;
+	padding: 0.4rem 0.8rem;
+	border: 1px solid var(--border-strong);
+	border-radius: 999px;
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+.chip-radio input:checked + span {
+	background: var(--text);
+	color: var(--surface);
+	border-color: var(--text);
+}
+.chip-radio input:focus-visible + span {
+	outline: 2px solid var(--accent, #2563eb);
+	outline-offset: 2px;
+}
+.board-day {
+	margin: 1rem 0 0.4rem;
+	font-size: 0.95rem;
+	color: var(--text-muted);
+}
+.board {
+	width: 100%;
+	border-collapse: collapse;
+	font-variant-numeric: tabular-nums;
+}
+.board th,
+.board td {
+	text-align: left;
+	padding: 0.45rem 0.5rem;
+	border-bottom: 1px solid var(--border);
+}
+.board th {
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+}
+.board-time {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-weight: 700;
+}
+.board-num {
+	font-weight: 600;
+}
+.board-flag {
+	display: inline-block;
+	margin-right: 0.3rem;
+	padding: 0.05rem 0.45rem;
+	border-radius: 4px;
+	font-size: 0.75rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.board-ok {
+	background: color-mix(in srgb, var(--success) 20%, transparent);
+}
+.board-late {
+	background: color-mix(in srgb, #ffb000 35%, transparent);
+}
+.board-missed {
+	background: color-mix(in srgb, #ff3b30 30%, transparent);
+}
+.toasts {
+	position: fixed;
+	top: 72px;
+	right: 16px;
+	z-index: 2000;
+	display: grid;
+	gap: 8px;
+	max-width: min(360px, calc(100vw - 32px));
+}
+.toast {
+	display: grid;
+	gap: 2px;
+	padding: 0.7rem 0.9rem;
+	border-radius: var(--radius-md);
+	background: #0a0a0a;
+	color: #fff;
+	text-decoration: none;
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+	border-left: 4px solid #00cc33;
+	animation: toast-in 0.25s ease-out;
+}
+.toast-late {
+	border-left-color: #ffb000;
+}
+.toast-missed {
+	border-left-color: #ff3b30;
+}
+@keyframes toast-in {
+	from {
+		opacity: 0;
+		transform: translateY(-6px);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.toast {
+		animation: none;
+	}
+}
+[data-group-only][hidden] {
+	display: none;
+}

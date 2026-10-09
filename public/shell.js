@@ -309,6 +309,26 @@
     });
   });
 
+  // A ride partner posted a trip status: say so, and link to the ride.
+  const toasts = document.createElement("div");
+  toasts.className = "toasts";
+  toasts.setAttribute("role", "status");
+  toasts.setAttribute("aria-live", "polite");
+  document.body.append(toasts);
+  es.addEventListener("ride-status", (e) => {
+    const s = JSON.parse(e.data);
+    const toast = document.createElement("a");
+    toast.className = `toast toast-${s.status}`;
+    toast.href = `/rides/${Number(s.rideId)}#trip-status`;
+    const who = document.createElement("strong");
+    who.textContent = s.name;
+    const what = document.createElement("span");
+    what.textContent = s.note ? `${s.text}: ${s.note}` : s.text;
+    toast.append(who, what);
+    toasts.append(toast);
+    setTimeout(() => toast.remove(), 9000);
+  });
+
   // The People chip covers both partners and synthetic attendees.
   const chip = document.querySelector('.shell-filters [data-layer="people"]');
   chip?.addEventListener("click", () => {

@@ -162,6 +162,10 @@ Origin, destination, departure time, seats, pairings, optional notes.
   *Mitigation:* none in the app: the browser fetches tiles directly from the configured provider. Self-hosted tiles (`map.customTileUrl`) close the channel.
 - **T-A3-D1**: Ride spam buries real rides.
   *Mitigation:* per-user rate limits: 5 ride posts and 10 claims per 10 minutes (`routes/rides.js`); posting requires an allowlisted account.
+- **T-A3-I3**: Trip status ("missed my connection, landing 18:40") reveals travel plans.
+  *Mitigation:* readable only by the ride's poster and accepted riders, checked when the ride page renders and again for each live event (`notifyRide` in `lib/live.js`). The arrivals board aggregates counts per airport and hour with no names. Posting is rate-limited (20 per 10 minutes). Covered by `tests/e2e/groups.test.js`.
+- **T-A3-S2**: Strangers join a group (shared taxi or transit) without approval and get members' contacts.
+  *Mitigation:* accepted as the point of groups; only allowlisted attendees can join, joins are audited (`group.joined`), and drivers' car offers still need approval.
 - **T-A3-E1**: Stored XSS in a note.
   *Mitigation:* `html\`\`` auto-escape; CSP without `unsafe-inline`; no SVG uploads in the field. See [`docs/security/xss.md`](docs/security/xss.md).
 

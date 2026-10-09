@@ -21,6 +21,7 @@ import { onClaimCreated, onRideCreated } from "../lib/demo.js";
 import { errorMessage } from "../lib/errors.js";
 import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
+import { notifyRide } from "../lib/live.js";
 import { listMeetups } from "../lib/meetups.js";
 import { rateLimit } from "../lib/rate-limit.js";
 import {
@@ -31,7 +32,11 @@ import {
   createRide,
   decideClaim,
   getRide,
+  latestRideUpdates,
+  postRideUpdate,
+  rideParticipants,
   ridesPostedBy,
+  TRIP_STATUSES,
   updateRideStatus,
   updateUserProfile,
   withdrawClaim,
@@ -73,8 +78,30 @@ function airportName(ride) {
 function directionLabel(d) {
   return d === "to_venue" ? "→ to venue" : "← from venue";
 }
-function kindLabel(k) {
-  return k === "offer" ? "Offering a ride" : "Looking for a ride";
+const MODE_LABEL = { taxi: "Sharing a taxi", transit: "Transit together" };
+/** @param {{ kind: string, mode?: string }} ride */
+function kindLabel(ride) {
+  if (ride.mode && ride.mode !== "car") return MODE_LABEL[ride.mode];
+  return ride.kind === "offer" ? "Offering a ride" : "Looking for a ride";
+}
+/** @param {{ kind: string, mode?: string }} ride */
+const isGroup = (ride) => !!ride.mode && ride.mode !== "car";
+/** CSS modifier for the ride's badge and pin. @param {{ kind: string, mode?: string }} ride */
+const kindClass = (ride) => (isGroup(ride) ? "group" : ride.kind);
+
+const STATUS_LABEL = {
+  on_time: "On time",
+  early: "Running early",
+  late: "Running late",
+  missed: "Missed a connection",
+  arrived: "Arrived",
+};
+/** @param {{ status: string, minutes: number | null }} u */
+function statusText(u) {
+  const base = STATUS_LABEL[u.status] || u.status;
+  return u.minutes && (u.status === "early" || u.status === "late")
+    ? `${base} (${u.minutes} min)`
+    : base;
 }
 function fmtDateTime(date, time) {
   return `${date} · ${time}`;
@@ -85,7 +112,7 @@ function rideCard(ride, { showActions = true } = {}) {
   return html`
     <article class="ride-card">
       <header class="ride-card-head">
-        <span class="badge badge-${ride.kind}">${kindLabel(ride.kind)}</span>
+        <span class="badge badge-${kindClass(ride)}">${kindLabel(ride)}</span>
         <span class="ride-card-direction">${directionLabel(ride.direction)}</span>
         ${
           trust
@@ -101,7 +128,7 @@ function rideCard(ride, { showActions = true } = {}) {
       </h3>
       <dl class="ride-card-meta">
         <div><dt>When</dt><dd>${fmtDateTime(ride.depart_date, ride.depart_time)}${ride.flex_minutes ? html` <span class="muted">±${ride.flex_minutes}m</span>` : ""}</dd></div>
-        <div><dt>${ride.kind === "offer" ? "Seats" : "Needs"}</dt><dd>${ride.seats}</dd></div>
+        <div><dt>${isGroup(ride) ? "Places" : ride.kind === "offer" ? "Seats" : "Needs"}</dt><dd>${ride.seats}</dd></div>
         <div><dt>Posted by</dt><dd>${ride.poster_name || maskEmail(ride.poster_email)}</dd></div>
       </dl>
       ${ride.notes ? html`<p class="ride-card-notes">${ride.notes}</p>` : ""}
@@ -233,7 +260,10 @@ post("/rides/new", async (ctx) => {
   const event = getEventConfig();
   const airportCodes = [...event.airports.map((a) => a.code), "OTHER"];
 
-  const kind = oneOf(body.kind, "kind", ["offer", "request"]);
+  const choice = oneOf(body.kind, "kind", ["offer", "request", "group"]);
+  // A group is an offer of places in a shared taxi or a transit trip.
+  const kind = choice === "group" ? "offer" : choice;
+  const mode = choice === "group" ? oneOf(body.mode, "mode", ["taxi", "transit"]) : "car";
   const direction = oneOf(body.direction, "direction", ["to_venue", "from_venue"]);
   const airport = oneOf(body.airport, "airport", airportCodes);
   const otherPlace =
@@ -293,6 +323,7 @@ post("/rides/new", async (ctx) => {
     meetupId,
     pickupLat,
     pickupLng,
+    mode,
   });
   onRideCreated(id);
   ctx.redirect(`/rides/${id}`);
@@ -322,7 +353,19 @@ function postForm({ values = {} }) {
           <strong>Looking for a ride</strong>
           <span class="muted">I need a seat; drivers can offer.</span>
         </label>
+        <label class="radio-tile">
+          <input type="radio" name="kind" value="group" ${values.kind === "group" ? "checked" : ""}>
+          <strong>Starting a group</strong>
+          <span class="muted">No car? Split a taxi or ride transit together. Anyone can join.</span>
+        </label>
       </fieldset>
+
+      <label data-group-only><span>The group will</span>
+        <select name="mode">
+          <option value="taxi">Share a taxi or rideshare and split the fare</option>
+          <option value="transit">Take the train or bus together</option>
+        </select>
+      </label>
 
       <label><span>Direction</span>
         <select name="direction" required>
@@ -354,7 +397,7 @@ function postForm({ values = {} }) {
         <input type="number" name="flex_minutes" min="0" max="720" value="0">
       </label>
 
-      <label><span>Seats <span class="muted">(offering: available; requesting: needed)</span></span>
+      <label><span>Seats <span class="muted">(offering: available; requesting: needed; group: places for others)</span></span>
         <input type="number" name="seats" min="1" max="8" value="1" required>
       </label>
 
@@ -461,7 +504,7 @@ get("/rides/mine", async (ctx) => {
                 (c) => html`
                   <article class="ride-card">
                     <header class="ride-card-head">
-                      <span class="badge badge-${c.kind}">${kindLabel(c.kind)}</span>
+                      <span class="badge badge-${kindClass(c)}">${kindLabel(c)}</span>
                       <span class="ride-card-direction">${directionLabel(c.direction)}</span>
                     </header>
                     <h3 class="ride-card-title">${airportName(c)}</h3>
@@ -535,7 +578,7 @@ get("/rides/:id", async (ctx) => {
           isOwner
             ? html`
               <section class="card">
-                <h2>Claims (${claims.length})</h2>
+                <h2>${isGroup(ride) ? "Joined" : "Claims"} (${claims.length})</h2>
                 ${
                   claims.length === 0
                     ? html`<p class="muted">No one has claimed this yet.</p>`
@@ -586,7 +629,7 @@ get("/rides/:id", async (ctx) => {
             : myClaim
               ? html`
                 <section class="card">
-                  <h2>Your claim — <em>${myClaim.status}</em></h2>
+                  <h2>${isGroup(ride) && myClaim.status === "accepted" ? "You're in this group" : html`Your claim — <em>${myClaim.status}</em>`}</h2>
                   ${
                     myClaim.status === "accepted"
                       ? html`<p class="contact-revealed">
@@ -614,23 +657,144 @@ get("/rides/:id", async (ctx) => {
                 </section>`
               : html`
                 <section class="card">
-                  <h2>Claim this ride</h2>
-                  <p class="muted">When the poster accepts, you'll see their contact info and they'll see yours.</p>
+                  <h2>${isGroup(ride) ? "Join this group" : "Claim this ride"}</h2>
+                  <p class="muted">${
+                    isGroup(ride)
+                      ? "You're in as soon as you join, and everyone in the group sees each other's contact."
+                      : "When the poster accepts, you'll see their contact info and they'll see yours."
+                  }</p>
                   <form method="post" action="/rides/${ride.id}/claim" class="stacked">
-                    <label><span>Seats</span>
+                    <label><span>${isGroup(ride) ? "Places" : "Seats"}</span>
                       <input type="number" name="seats" min="1" max="${ride.seats}" value="1" required>
                     </label>
                     <label><span>Message <span class="muted">(optional)</span></span>
                       <textarea name="message" maxlength="300" rows="2"
                                 placeholder="Hi! Flying in around 5pm, can split the fare."></textarea>
                     </label>
-                    <button type="submit" class="button button-primary">Claim seat</button>
+                    <button type="submit" class="button button-primary">${isGroup(ride) ? "Join group" : "Claim seat"}</button>
                   </form>
                 </section>`
         }
+        ${groupMembersCard(ride, user.id)}
+        ${tripStatusCard(ride, user.id)}
       `,
     }),
   );
+});
+
+/**
+ * Everyone in a group, with contacts, shown only to its members.
+ * @param {{ id: number, user_id: number, mode?: string, kind: string }} ride @param {number} viewerId
+ */
+function groupMembersCard(ride, viewerId) {
+  if (!isGroup(ride) || !rideParticipants(ride.id).has(viewerId)) return "";
+  const members =
+    /** @type {{ id: number, name: string | null, email: string, contact: string | null, organizer: number }[]} */ (
+      db
+        .prepare(
+          `SELECT u.id, u.display_name AS name, u.email, u.contact_method AS contact, 1 AS organizer
+           FROM rides r JOIN users u ON u.id = r.user_id WHERE r.id = ?1
+         UNION ALL
+         SELECT u.id, u.display_name, u.email, u.contact_method, 0
+           FROM claims c JOIN users u ON u.id = c.claimer_id
+          WHERE c.ride_id = ?1 AND c.status = 'accepted'`,
+        )
+        .all(ride.id)
+    );
+  return html`
+    <section class="card">
+      <h2>Who's going (${members.length})</h2>
+      <ul class="member-list">
+        ${members.map(
+          (m) => html`<li>
+            <strong>${m.name || maskEmail(m.email)}</strong>${m.organizer ? html` <span class="muted small">organizer</span>` : ""}
+            ${m.id === viewerId ? html` <span class="muted small">(you)</span>` : html`<span class="muted small">${m.contact || m.email}</span>`}
+          </li>`,
+        )}
+      </ul>
+    </section>`;
+}
+
+/**
+ * Trip status: each participant's latest report, plus a form to post one.
+ * Shown only to the people on the ride, once someone has joined it.
+ * @param {{ id: number }} ride @param {number} viewerId
+ */
+function tripStatusCard(ride, viewerId) {
+  const people = rideParticipants(ride.id);
+  if (!people.has(viewerId) || people.size < 2) return "";
+  const updates = latestRideUpdates(ride.id);
+  return html`
+    <section class="card trip-status" id="trip-status">
+      <h2>Trip status</h2>
+      <p class="muted small">Only people on this ride see these.</p>
+      ${
+        updates.length
+          ? html`<ul class="status-list">${updates.map(
+              (u) => html`<li class="status-${u.status}">
+                <strong>${u.user_id === viewerId ? "You" : u.name || "A ride partner"}</strong>
+                <span class="status-pill">${statusText(u)}</span>
+                ${u.note ? html`<span class="muted small">${u.note}</span>` : ""}
+                <time class="muted small" datetime="${new Date(u.created_at).toISOString()}">${new Date(u.created_at).toISOString().slice(11, 16)} UTC</time>
+              </li>`,
+            )}</ul>`
+          : html`<p class="muted">No updates yet. Running late or missed a flight? Let your partners know.</p>`
+      }
+      <form method="post" action="/rides/${ride.id}/status" class="stacked status-form">
+        <fieldset class="status-choices">
+          <legend class="sr-only">How's it going?</legend>
+          ${TRIP_STATUSES.map(
+            (s, i) => html`<label class="chip-radio">
+              <input type="radio" name="status" value="${s}" ${i === 0 ? "checked" : ""}><span>${STATUS_LABEL[s]}</span>
+            </label>`,
+          )}
+        </fieldset>
+        <div class="form-grid">
+          <label><span>By how many minutes <span class="muted">(early/late)</span></span>
+            <input type="number" name="minutes" min="1" max="720" inputmode="numeric">
+          </label>
+          <label><span>Note <span class="muted">(optional)</span></span>
+            <input type="text" name="note" maxlength="140" placeholder="Rebooked on UA 512, landing 18:40">
+          </label>
+        </div>
+        <button type="submit" class="button button-primary">Share update</button>
+      </form>
+    </section>`;
+}
+
+post("/rides/:id/status", async (ctx) => {
+  const user = requireUser(ctx);
+  if (!user) return;
+  if (!withinLimit(ctx, `ride-status:${user.id}`, 20)) return;
+  const rideId = parseInt(ctx.params.id, 10);
+  const body = await ctx.formBody();
+  const status = oneOf(body.status, "status", [...TRIP_STATUSES]);
+  const minutesRaw = (body.minutes ?? "").trim();
+  const minutes =
+    (status === "early" || status === "late") && minutesRaw !== ""
+      ? reqInt(minutesRaw, "minutes", { min: 1, max: 720 })
+      : null;
+  const note = optString(body.note, "note", { max: 140 });
+  try {
+    postRideUpdate({ rideId, userId: user.id, status, minutes, note });
+  } catch (err) {
+    ctx.error(errorMessage(err), 403);
+    return;
+  }
+  notifyRide(
+    rideId,
+    "ride-status",
+    {
+      rideId,
+      userId: user.id,
+      name: user.displayName || "A ride partner",
+      status,
+      text: statusText({ status, minutes }),
+      note,
+    },
+    user.id,
+  );
+  ctx.redirect(`/rides/${rideId}#trip-status`);
 });
 
 post("/rides/:id/claim", async (ctx) => {
