@@ -125,7 +125,7 @@ proxy in this codebase.
 ## What's still possible
 
 - A peer deployment we trust (`TRUST_PEERS`) that becomes malicious can return arbitrary JSON up to the cap and we'll process it. Mitigation: JSON parser is the standard library; resulting object is type-checked before use; any field we don't expect is ignored.
-- A peer's hostname could resolve to a public IP that they then point at a vulnerable third-party host. The third party would receive our request, but: we send no auth headers and no cookies, so the request is equivalent to any unauthenticated GET from the internet. Low blast-radius.
+- A peer's hostname could resolve to a public IP that they then point at a vulnerable third-party host. The third party would receive our request, but: we send no auth headers and no cookies, so the request is equivalent to any unauthenticated GET from the internet. Low blast-radius. DIDComm replies (`lib/didcomm.js`) are the one POST through the same policy: an encrypted body, at most one per inbound authcrypt message, rate-limited per sender (THREAT_MODEL.md CC-15).
 - A peer's TLS cert is forged by a rogue CA. Out of scope per [`THREAT_MODEL.md`](../../THREAT_MODEL.md) residual risks.
 
 ---

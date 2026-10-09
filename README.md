@@ -97,7 +97,7 @@ Never set it on a real event.
 
 | Party | DID method | Key | Where it lives |
 |---|---|---|---|
-| Deployment (issuer) | [`did:web`](https://w3c-ccg.github.io/did-method-web/) | Ed25519 (`#key-1`, VC-JWT) and P-256 (`#key-2`, SD-JWT VC) | Private key in a file outside the database (`DEPLOYMENT_KEY_PATH`, or inline `DEPLOYMENT_KEY`), so backups carry no issuer key. DID document at `/.well-known/did.json` |
+| Deployment (issuer, verifier, DIDComm agent) | [`did:web`](https://w3c-ccg.github.io/did-method-web/) | Ed25519 (`#key-1`, VC-JWT), P-256 (`#key-2`, SD-JWT VC and OpenID4VP requests), X25519 (`#key-x25519-1`, DIDComm key agreement), all as `JsonWebKey2020` | Private key in a file outside the database (`DEPLOYMENT_KEY_PATH`, or inline `DEPLOYMENT_KEY`), so backups carry no issuer key. DID document at `/.well-known/did.json` |
 | Attendee (holder/subject) | [`did:key`](https://w3c-ccg.github.io/did-method-key/) | Ed25519, multicodec `0xed01`, base58btc multibase `z6Mk…` | Generated in the browser with WebCrypto. The private key stays in IndexedDB; the user can download it as a JWK backup file and restore it on another device |
 
 The DID document a demo deployment serves. This is real output from a local
@@ -106,20 +106,23 @@ hostname and key will differ, and the demo's key changes on every restart:
 
 ```json
 {
-  "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/multikey/v1"],
+  "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1"],
   "id": "did:web:rideshare-demo.onrender.com",
-  "verificationMethod": [{
-    "id": "did:web:rideshare-demo.onrender.com#key-1",
-    "type": "Multikey",
-    "controller": "did:web:rideshare-demo.onrender.com",
-    "publicKeyMultibase": "z6MkfVPgeW2K1nW5FZnCiQNRQKAj8VpnjKL8vf9R6kSEPYAW"
-  }],
-  "assertionMethod": ["did:web:rideshare-demo.onrender.com#key-1"],
+  "verificationMethod": [
+    { "id": "did:web:rideshare-demo.onrender.com#key-1", "type": "JsonWebKey2020", "controller": "did:web:rideshare-demo.onrender.com",
+      "publicKeyJwk": {"kty": "OKP", "crv": "Ed25519", "x": "D2d8YkeVVmu9UbGM7B0nxEo2hFA-RRH3ndMSLWuROKM"} },
+    { "id": "did:web:rideshare-demo.onrender.com#key-2", "type": "JsonWebKey2020", "controller": "did:web:rideshare-demo.onrender.com",
+      "publicKeyJwk": {"kty": "EC", "crv": "P-256", "x": "G7sWqzrLpdZMO1yHQPyvudRTUcEaNQTB5SquLjJ8yoY", "y": "PjSHYqXiGqcEvLAC2RsECeQsCYrQm3mhvnd4IbksVik"} },
+    { "id": "did:web:rideshare-demo.onrender.com#key-x25519-1", "type": "JsonWebKey2020", "controller": "did:web:rideshare-demo.onrender.com",
+      "publicKeyJwk": {"kty": "OKP", "crv": "X25519", "x": "kbIT5_1gjk51UA8uu0ACDOb2--rvNQZagkIbMP0icWQ"} }
+  ],
+  "keyAgreement": ["did:web:rideshare-demo.onrender.com#key-x25519-1"],
+  "assertionMethod": ["did:web:rideshare-demo.onrender.com#key-1", "did:web:rideshare-demo.onrender.com#key-2"],
   "authentication": ["did:web:rideshare-demo.onrender.com#key-1"],
   "service": [{
-    "id": "did:web:rideshare-demo.onrender.com#rideshare",
-    "type": "EventRideshareTrust",
-    "serviceEndpoint": "https://rideshare-demo.onrender.com"
+    "id": "did:web:rideshare-demo.onrender.com#didcomm-1",
+    "type": "DIDCommMessaging",
+    "serviceEndpoint": {"uri": "https://rideshare-demo.onrender.com/didcomm", "accept": ["didcomm/v2"], "routingKeys": []}
   }]
 }
 ```
@@ -190,13 +193,14 @@ payload). Its issuer key no longer exists, so it is for reading, not verifying:
 
 | Concern | Spec | Status |
 |---|---|---|
-| DID syntax and documents | [DID Core](https://www.w3.org/TR/did-core/) | Followed. `Multikey` verification method with `publicKeyMultibase` |
+| DID syntax and documents | [DID Core](https://www.w3.org/TR/did-core/) | Followed. `JsonWebKey2020` methods rather than Multikey, because didcomm-rust rejects documents containing Multikey |
 | Issuer identifier | `did:web` | Followed for minting, including `%3A` port encoding. **Deviation:** resolution refuses any port other than 443 (an SSRF guard), so a `did:web:host%3A8443` issuer can't be verified by another deployment. A deployment verifies its own credentials against its local key, with no network round trip |
 | Holder identifier | `did:key` (Ed25519) | Followed. Encoding covered by `tests/unit/crypto-did-key.test.js` |
 | Data model | [VC Data Model 2.0](https://www.w3.org/TR/vc-data-model-2.0/) | Followed: v2 context, `validFrom`. App terms resolve through the v2 context's `@vocab` |
 | Securing | VC-JWT, EdDSA ([RFC 8032](https://www.rfc-editor.org/rfc/rfc8032)) | **Deviation:** VC-JWT 1.1 shape, with the credential in a `vc` claim next to `iss`/`sub`/`nbf`/`jti`, while the header says `typ: vc+jwt`, the [VC-JOSE-COSE](https://www.w3.org/TR/vc-jose-cose/) media type, whose payload is the bare credential. A strict VC-JOSE-COSE verifier will see that mismatch; it has to read the `vc` claim to accept these |
 | Signatures | Ed25519, ES256 | Node's built-in `crypto`, verified against RFC 8032 test vectors. ES256 (P-256) signs SD-JWT VCs |
 | Issuance to wallets | [OpenID4VCI 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) | Pre-authorized code flow with a PIN, nonce endpoint, `jwt` proofs (ES256 or Ed25519), format `dc+sd-jwt`. Not implemented: authorization code flow, DPoP, key attestations, deferred issuance, so not HAIP |
+| Messaging | [DIDComm v2.1](https://identity.foundation/didcomm-messaging/spec/v2.1/) | Authcrypt (`ECDH-1PU+A256KW`) and anoncrypt (`ECDH-ES+A256KW`) with `A256CBC-HS512` over X25519; Trust Ping 2.0 and Discover Features 2.0 between deployments. Checked against the spec vector and against didcomm-rust (packing both ways, and a live agent round trip). Not implemented: signed (JWS) messages, mediators and forward routing, `A256GCM`/`XC20P` |
 | Presentation | [OpenID4VP 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) | `decentralized_identifier` client id with an ES256-signed request object by reference, DCQL, `direct_post`, `dc+sd-jwt` with key binding. Not implemented: `x509_hash`, `direct_post.jwt`, the Digital Credentials API |
 | Selective disclosure | [SD-JWT, RFC 9901](https://www.rfc-editor.org/rfc/rfc9901) + [SD-JWT VC draft-19](https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/) | Followed. Every ride credential is also issued as a `dc+sd-jwt` bound to the holder's `did:key` via `cnf.jwk`; the holder picks claims on `/trust` and signs a KB-JWT with a verifier nonce. Tested against the RFC's own digest vectors. Issuer keys at `/.well-known/jwt-vc-issuer`; `x5c` chains are not supported |
 
@@ -233,6 +237,17 @@ verifier's DID document before the browser sends exactly the requested claims.
 HAIP's `x509_hash` client identifiers and encrypted `direct_post.jwt`
 responses are not implemented.
 
+### Talk to other events (DIDComm)
+
+Each deployment's `did:web` is also a [DIDComm v2.1](https://identity.foundation/didcomm-messaging/spec/v2.1/)
+agent: an X25519 `keyAgreement` key and a `DIDCommMessaging` service at
+`/didcomm` in its DID document. On `/trust/didcomm` you can send a Trust Ping or
+a Discover Features query to any deployment's DID and watch the authenticated
+reply arrive; pinging the deployment's own DID shows the whole round trip on
+one server. Messages are authcrypt (`ECDH-1PU+A256KW`, `A256CBC-HS512`), built
+on `node:crypto` alone, and interoperate with didcomm-rust, the engine of
+[@writerslogic/didcomm-ts](https://github.com/writerslogic/didcomm-ts).
+
 ### Selective disclosure
 
 Each ride credential has an SD-JWT VC twin with every ride and counterpart
@@ -246,7 +261,8 @@ next to how many digests stayed hidden (withheld claims and decoys look the
 same). Replaying a presentation fails on the spent nonce.
 
 **Not implemented (yet):** status lists or any revocation, BBS proofs, Data
-Integrity proofs, DIDComm, and HAIP conformance. Credentials carry no `exp`, and a deployment
+Integrity proofs, DIDComm credential exchange (issue-credential 3.0 and
+present-proof 3.0 define no SD-JWT format), and HAIP conformance. Credentials carry no `exp`, and a deployment
 publishes a single Ed25519 key, so rotating it makes every earlier VC-JWT
 unverifiable. The
 [TRUST.md](./TRUST.md) roadmap covers counter-signed credentials (the

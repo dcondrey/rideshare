@@ -28,7 +28,7 @@ self-hostable**. No central registry, no proprietary format, no lock-in.
 |---|---|---|
 | User identity | [`did:key` (W3C-CCG)](https://w3c-ccg.github.io/did-method-key/) | Ed25519, multibase `z`, multicodec `0xed01` |
 | Deployment identity | [`did:web` (W3C-CCG)](https://w3c-ccg.github.io/did-method-web/) | DID document at `/.well-known/did.json` |
-| DID document | [DID Core (W3C)](https://www.w3.org/TR/did-core/) | `Multikey` verification method |
+| DID document | [DID Core (W3C)](https://www.w3.org/TR/did-core/) | `JsonWebKey2020` verification methods (see below) |
 | Credentials | [VC Data Model 2.0 (W3C)](https://www.w3.org/TR/vc-data-model-2.0/) | JSON-LD context, `RideAttendanceCredential` type |
 | Credential format | [VC-JWT (W3C)](https://www.w3.org/TR/vc-jwt/) | Compact JWT, `typ: vc+jwt` |
 | Signing | EdDSA (RFC 8032) | Ed25519, 64-byte signatures |
@@ -65,28 +65,34 @@ The DID document is served at `/.well-known/did.json`:
 
 ```json
 {
-  "@context": [
-    "https://www.w3.org/ns/did/v1",
-    "https://w3id.org/security/multikey/v1"
-  ],
+  "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1"],
   "id": "did:web:rideshare.example.com",
   "verificationMethod": [
-    {
-      "id": "did:web:rideshare.example.com#key-1",
-      "type": "Multikey",
+    { "id": "did:web:rideshare.example.com#key-1", "type": "JsonWebKey2020",
       "controller": "did:web:rideshare.example.com",
-      "publicKeyMultibase": "z6Mki…"
-    }
+      "publicKeyJwk": { "kty": "OKP", "crv": "Ed25519", "x": "…" } },
+    { "id": "did:web:rideshare.example.com#key-2", "type": "JsonWebKey2020",
+      "controller": "did:web:rideshare.example.com",
+      "publicKeyJwk": { "kty": "EC", "crv": "P-256", "x": "…", "y": "…" } },
+    { "id": "did:web:rideshare.example.com#key-x25519-1", "type": "JsonWebKey2020",
+      "controller": "did:web:rideshare.example.com",
+      "publicKeyJwk": { "kty": "OKP", "crv": "X25519", "x": "…" } }
   ],
-  "assertionMethod": ["did:web:rideshare.example.com#key-1"],
+  "keyAgreement":    ["did:web:rideshare.example.com#key-x25519-1"],
+  "assertionMethod": ["did:web:rideshare.example.com#key-1", "did:web:rideshare.example.com#key-2"],
   "authentication":  ["did:web:rideshare.example.com#key-1"],
   "service": [
-    { "id": "did:web:rideshare.example.com#rideshare",
-      "type": "EventRideshareTrust",
-      "serviceEndpoint": "https://rideshare.example.com" }
+    { "id": "did:web:rideshare.example.com#didcomm-1", "type": "DIDCommMessaging",
+      "serviceEndpoint": { "uri": "https://rideshare.example.com/didcomm",
+                           "accept": ["didcomm/v2"], "routingKeys": [] } }
   ]
 }
 ```
+
+Every key is a `JsonWebKey2020`: Multikey is the newer form, but didcomm-rust
+(the engine of most DIDComm agents) refuses to parse a DID document containing
+a Multikey method or any service type other than `DIDCommMessaging`, so the
+document carries neither.
 
 Anyone — another deployment, the W3C VC playground, a custom verifier — can
 fetch this document and verify any credential signed by us, with no
@@ -325,6 +331,28 @@ verifier.
 | Response | `POST /oid4vp/response` | `vp_token` must map the DCQL credential id to one SD-JWT VC presentation; KB-JWT `aud` = the full prefixed client id, `nonce` = the request's; `vct` must be this deployment's; settles once |
 | Status | `GET /oid4vp/status/:id` | The request id is the capability; returns the verified claims |
 | In-app holder | `POST /trust/oid4vp/inspect` | Fetches a request (locally, or via `safe-fetch`), checks `typ`, that `kid` belongs to the client id's DID, and the signature against that DID's `assertionMethod` key; the browser then signs and posts only the requested claims |
+
+## DIDComm between deployments
+
+`lib/didcomm-crypto.js` implements the DIDComm v2.1 envelopes on node:crypto
+alone; `lib/didcomm.js` and `routes/didcomm.js` make each deployment's did:web
+an agent.
+
+| Piece | Detail |
+|---|---|
+| Keys | X25519 `#key-x25519-1` in `keyAgreement` (`lib/keys.js` `loadX25519Key()`, `${DEPLOYMENT_KEY_PATH}.x25519`) |
+| Endpoint | `DIDCommMessaging` service → `POST /didcomm`, `application/didcomm-encrypted+json`, 202 on acceptance, 64 KB cap, rate-limited per IP |
+| Envelopes | Authcrypt `ECDH-1PU+A256KW` + `A256CBC-HS512` (outbound always); anoncrypt `ECDH-ES+A256KW` + `A256CBC-HS512` accepted. `A256GCM` and `XC20P` are refused: optional in the spec, and Node has no XChaCha20 |
+| Protocols | Trust Ping 2.0 (answers `ping` with `ping-response` on the same thread); Discover Features 2.0 (discloses both protocols) |
+| Replies | Only to authcrypt senders, to the endpoint their own DID document declares, through `lib/safe-fetch.js`, rate-limited per sender |
+| UI | `/trust/didcomm`: ping or query any `did:web` agent, and see the message log |
+
+Verified against the spec's `ENCRYPTED_MSG_AUTH_X25519` vector
+(`tests/vectors/didcomm-authcrypt-x25519.json`) and against didcomm-rust, the
+engine of @writerslogic/didcomm-ts: envelope packing in both directions and
+both modes (`tests/interop/didcomm-rust.mjs`), and a full agent round trip in
+which a didcomm-rust agent with its own did:web pings a running deployment
+over HTTP and authenticates the reply (`tests/interop/didcomm-rust-agent.mjs`).
 
 ## Spec versions and interoperability decisions
 

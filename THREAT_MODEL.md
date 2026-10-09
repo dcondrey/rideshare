@@ -441,6 +441,11 @@ See [`docs/security/ssrf.md`](docs/security/ssrf.md) for details.
 **Threat:** a page impersonates a verifier to harvest claims; a captured `vp_token` is replayed to the same or another verifier; someone posts a response for a request they did not receive; a forged request makes the in-app holder post claims to an attacker's endpoint.
 **Mitigation:** requests are signed by the verifier's did:web key (`decentralized_identifier` prefix), and the in-app holder checks that signature against the DID document's `assertionMethod` before showing the request, then sends only the requested claims. A response is accepted only for a live, unanswered `state`; the key binding must name the full client identifier as `aud` and carry that request's `nonce`, so a presentation made for one verifier or request fails at any other; each request settles once with an atomic status update. Status reads need the unguessable request id. Remote requests are fetched through `lib/safe-fetch.js`. Residual: the holder trusts whatever verifier controls the DID's domain, the usual did:web assumption. Tests: `tests/e2e/oid4vp.test.js`.
 
+### CC-15: Forged, replayed or reflected DIDComm messages
+
+**Threat:** a message claims a sender it was not encrypted by; a ciphertext is tampered with; an attacker publishes a DID whose DIDComm endpoint points at a victim, so this agent's replies hit the victim; a flood of large messages exhausts the server.
+**Mitigation:** authcrypt binds the sender: the KEK derivation uses the sender's static X25519 key from its own DID document's `keyAgreement`, and the plaintext `from` must equal the `skid` DID, so a forged sender fails to decrypt. A256CBC-HS512's tag is checked in constant time before decryption, and `apv` must match the recipient key ids. Replies go only to authcrypt senders, at the endpoint their own document declares, via `lib/safe-fetch.js` (public HTTPS only, no redirects), rate-limited per sender: one inbound message yields at most one small outbound one. Inbound messages are capped at 64 KB and rate-limited per IP, and the message log keeps the last 500 rows. Discover Features match patterns are bounded to stop regex backtracking. Tests: `tests/unit/didcomm-crypto.test.js`, `tests/e2e/didcomm.test.js`.
+
 ---
 
 ## In-scope vs out-of-scope

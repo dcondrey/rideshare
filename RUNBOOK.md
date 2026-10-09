@@ -113,7 +113,7 @@ The CSV is a single email column, or any multi-column file with an `email` heade
 
 ### 6. Confirm the deployment identity came up
 
-The deployment generates its own Ed25519 signing key on first boot and derives a `did:web:<host-of-APP_URL>` identity from it. The private key is a file at `DEPLOYMENT_KEY_PATH`, outside the database, so it is not in a `npm run backup` dump — back it up separately, together with its ES256 sibling at `DEPLOYMENT_KEY_PATH.es256`, which signs SD-JWT VCs. (An older release kept it in the `signing_keys` table; `lib/keys.js` migrates that row out to the file on first boot and clears it.) Verify both the health check and the DID document:
+The deployment generates its own Ed25519 signing key on first boot and derives a `did:web:<host-of-APP_URL>` identity from it. The private key is a file at `DEPLOYMENT_KEY_PATH`, outside the database, so it is not in a `npm run backup` dump — back it up separately, together with its siblings `DEPLOYMENT_KEY_PATH.es256` (signs SD-JWT VCs and OpenID4VP requests) and `DEPLOYMENT_KEY_PATH.x25519` (DIDComm key agreement). (An older release kept it in the `signing_keys` table; `lib/keys.js` migrates that row out to the file on first boot and clears it.) Verify both the health check and the DID document:
 
 ```bash
 curl -fsS https://$APP_URL/health | jq .

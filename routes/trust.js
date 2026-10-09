@@ -73,7 +73,7 @@ get("/trust", async (ctx) => {
       children: html`
         <section class="page-head">
           <h1>Portable trust</h1>
-          <span><a class="link" href="/verify">Verify an attendee</a> · <a class="link" href="/trust/verify">Verifier playground →</a></span>
+          <span><a class="link" href="/verify">Verify an attendee</a> · <a class="link" href="/trust/didcomm">DIDComm</a> · <a class="link" href="/trust/verify">Verifier playground →</a></span>
         </section>
 
         <section class="trust-explainer card">
