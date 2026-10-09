@@ -23,6 +23,11 @@ crypto and the browser's WebCrypto.
 
 ## Try the live demo
 
+**[rideshare-demo.onrender.com](https://rideshare-demo.onrender.com)**, issuer
+`did:web:rideshare-demo.onrender.com`. It runs on Render's free plan, so the
+first request after a quiet spell takes up to a minute while it wakes, and
+every wake-up starts a fresh demo.
+
 The demo runs as the **Internet Demo Workshop (IDW)**, a fictional demo
 unconference modeled on the Internet Identity Workshop ("Show me, don't tell
 me": no slide decks, bugs are celebrated). Sign-in is one click, and the
