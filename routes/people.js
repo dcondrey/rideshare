@@ -5,6 +5,7 @@
  *   GET /people/:id    one profile
  */
 
+import { canMessage, hasBlocked } from "../lib/chat.js";
 import { html, layout } from "../lib/html.js";
 import { getProfile, listDirectory } from "../lib/people.js";
 import { get } from "../lib/router.js";
@@ -91,6 +92,16 @@ get("/people/:id", async (ctx) => {
           ${p.affiliation ? html`<p class="muted">${p.affiliation}</p>` : ""}
           ${p.bio ? html`<p>${p.bio}</p>` : ""}
           ${p.link ? html`<p>${profileLink(p)}</p>` : ""}
+          ${
+            p.id !== user.id
+              ? html`<p class="row">
+                  ${canMessage(user.id, p.id) ? html`<a class="button button-primary" href="/messages/${p.id}">Message</a>` : ""}
+                  <form method="post" action="/people/${p.id}/${hasBlocked(user.id, p.id) ? "unblock" : "block"}" class="inline">
+                    <button class="button">${hasBlocked(user.id, p.id) ? "Unblock" : "Block"}</button>
+                  </form>
+                </p>`
+              : ""
+          }
           ${p.id === user.id ? html`<p><a class="button" href="/me">Edit profile</a>${p.listed ? "" : html` <span class="muted small">Not listed in the directory.</span>`}</p>` : ""}
         </section>
       `,

@@ -2175,3 +2175,139 @@ fieldset legend {
 .person-name {
 	font-weight: 700;
 }
+
+/* ── Chat and messages ───────────────────────────────────────────────────── */
+.chat-tabs {
+	display: flex;
+	gap: 0.25rem;
+	margin-bottom: 0.75rem;
+}
+.chat-tabs a {
+	padding: 0.4rem 0.9rem;
+	border-radius: 999px;
+	text-decoration: none;
+	color: var(--text-muted);
+	border: 1px solid var(--border);
+}
+.chat-tabs a[aria-current="page"] {
+	background: var(--text);
+	color: var(--surface);
+	border-color: var(--text);
+}
+.count-badge {
+	display: inline-block;
+	min-width: 1.2em;
+	padding: 0 0.35em;
+	border-radius: 999px;
+	background: #ff3b30;
+	color: #fff;
+	font-size: 0.75rem;
+	font-weight: 700;
+	text-align: center;
+}
+.chat-log {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 0.75rem;
+	display: grid;
+	gap: 0.5rem;
+}
+.chat-msg {
+	display: grid;
+	gap: 0.1rem;
+	max-width: 85%;
+	padding: 0.5rem 0.75rem;
+	border-radius: 14px 14px 14px 4px;
+	background: var(--surface-2);
+	position: relative;
+}
+.chat-msg.is-mine {
+	justify-self: end;
+	border-radius: 14px 14px 4px 14px;
+	background: color-mix(in srgb, var(--success) 18%, var(--surface));
+}
+.chat-msg.is-new {
+	animation: toast-in 0.25s ease-out;
+}
+.chat-meta {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+.chat-meta strong {
+	color: var(--text);
+}
+.chat-body {
+	overflow-wrap: anywhere;
+}
+.chat-action {
+	display: inline;
+	margin: 0;
+	font-size: 0.75rem;
+}
+.chat-action .link-button {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	padding: 0;
+}
+.chat-form {
+	position: sticky;
+	bottom: 0;
+	display: flex;
+	gap: 0.5rem;
+	padding: 0.5rem 0 0;
+	background: var(--surface);
+}
+.chat-form input {
+	flex: 1;
+	min-width: 0;
+}
+.chat-rules {
+	margin-top: 0;
+}
+.thread-title {
+	font-size: 1.15rem;
+	margin: 0 0 0.75rem;
+}
+.convo-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+.convo {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.25rem 0.5rem;
+	padding: 0.7rem 0;
+	border-bottom: 1px solid var(--border);
+	text-decoration: none;
+	color: inherit;
+}
+.convo-last {
+	flex-basis: 100%;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.convo.is-unread strong {
+	color: var(--text);
+}
+.toast-dm {
+	border-left-color: #1a7dff;
+}
+.shell-nav-item.has-unread .shell-nav-icon::after {
+	content: "";
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	margin-left: 2px;
+	vertical-align: top;
+	border-radius: 50%;
+	background: #ff3b30;
+}
+.report blockquote {
+	margin: 0.5rem 0;
+	padding: 0.5rem 0.75rem;
+	border-left: 3px solid var(--border-strong);
+	background: var(--surface-2);
+}

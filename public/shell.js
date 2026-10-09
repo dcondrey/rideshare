@@ -67,7 +67,8 @@
     current = path;
     panel.hidden = false;
     document.body.classList.add("panel-open");
-    body.scrollTop = 0;
+    // Conversations open at the newest message; everything else at the top.
+    body.scrollTop = body.querySelector("[data-chat-log], [data-dm-log]") ? body.scrollHeight : 0;
     setUrl(path, push);
     body.focus({ preventScroll: true });
   }
@@ -284,6 +285,13 @@
   requestAnimationFrame(frame);
 
   const es = new EventSource("/live/stream");
+  /** @type {Record<string, ((msg: any) => void)[]>} */
+  const liveHandlers = {};
+  window.rideshareLive = {
+    on(type, fn) {
+      (liveHandlers[type] ||= []).push(fn);
+    },
+  };
   es.addEventListener("ghosts", (e) => {
     const list = JSON.parse(e.data);
     const seen = new Set();
@@ -318,25 +326,77 @@
     });
   });
 
+  // One stream for the whole page; panels subscribe here instead of opening
+  // their own EventSource.
+  for (const type of ["chat", "dm"]) {
+    es.addEventListener(type, (e) => {
+      const msg = JSON.parse(e.data);
+      for (const fn of liveHandlers[type] || []) fn(msg);
+    });
+  }
+
   // A ride partner posted a trip status: say so, and link to the ride.
   const toasts = document.createElement("div");
   toasts.className = "toasts";
   toasts.setAttribute("role", "status");
   toasts.setAttribute("aria-live", "polite");
   document.body.append(toasts);
+  function toast(kind, href, title, text) {
+    const t = document.createElement("a");
+    t.className = `toast toast-${kind}`;
+    t.href = href;
+    const who = document.createElement("strong");
+    who.textContent = title;
+    const what = document.createElement("span");
+    what.textContent = text;
+    t.append(who, what);
+    toasts.append(t);
+    setTimeout(() => t.remove(), 9000);
+  }
   es.addEventListener("ride-status", (e) => {
     const s = JSON.parse(e.data);
-    const toast = document.createElement("a");
-    toast.className = `toast toast-${s.status}`;
-    toast.href = `/rides/${Number(s.rideId)}#trip-status`;
-    const who = document.createElement("strong");
-    who.textContent = s.name;
-    const what = document.createElement("span");
-    what.textContent = s.note ? `${s.text}: ${s.note}` : s.text;
-    toast.append(who, what);
-    toasts.append(toast);
-    setTimeout(() => toast.remove(), 9000);
+    toast(
+      s.status,
+      `/rides/${Number(s.rideId)}#trip-status`,
+      s.name,
+      s.note ? `${s.text}: ${s.note}` : s.text,
+    );
   });
+
+  // Chat: append to an open room or conversation; otherwise flag the Chat tab.
+  const chatNav = document.querySelector('.shell-nav a[href="/chat"]');
+  const time = (ms) => new Date(ms).toISOString().slice(11, 16);
+  function appendMessage(log, m) {
+    if (log.querySelector(`[data-id="${Number(m.id)}"]`)) return;
+    const li = document.createElement("li");
+    li.className = "chat-msg is-new";
+    li.dataset.id = String(m.id);
+    const meta = document.createElement("span");
+    meta.className = "chat-meta";
+    const who = document.createElement("strong");
+    who.textContent = m.name;
+    const at = document.createElement("time");
+    at.textContent = time(m.at);
+    meta.append(who, " ", at);
+    const body = document.createElement("span");
+    body.className = "chat-body";
+    body.textContent = m.body;
+    li.append(meta, body);
+    log.append(li);
+    log.closest(".panel-body")?.scrollTo({ top: 1e9, behavior: reduce ? "auto" : "smooth" });
+    document.querySelector("[data-chat-empty]")?.remove();
+  }
+  window.rideshareLive.on("chat", (m) => {
+    const log = document.querySelector("[data-chat-log]");
+    if (log) appendMessage(log, m);
+  });
+  window.rideshareLive.on("dm", (m) => {
+    const log = document.querySelector(`[data-dm-log][data-other="${Number(m.from)}"]`);
+    if (log) return appendMessage(log, m);
+    chatNav?.classList.add("has-unread");
+    toast("dm", `/messages/${Number(m.from)}`, m.name, m.body);
+  });
+  chatNav?.addEventListener("click", () => chatNav.classList.remove("has-unread"));
 
   // The People chip covers both partners and synthetic attendees.
   const chip = document.querySelector('.shell-filters [data-layer="people"]');

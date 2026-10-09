@@ -6,9 +6,9 @@ What rideshare deliberately doesn't build, and why. These are decisions, not TOD
 
 Two more codebases, app-store review, a distribution signing key, and push notifications via a third party that sees user activity. The responsive web page works on any phone with nothing to install, can go on the home screen, and updates on next load. No service worker or offline cache; location is requested only when you tap "Share my location".
 
-## No real-time chat
+## No end-to-end encrypted chat
 
-A different product with its own threat model (group keys, persistence, moderation) and legal exposure (CSAM scanning, lawful intercept). A confirmed ride shows contact info; people talk on Signal, Matrix or the event's chat.
+There is a room and direct messages now, but they are stored on the server in the clear, behind access checks. Attendees have no encryption keys of their own beyond the `did:key` signing key, keys lost with a browser would lose messages, and organizers need to read a reported message to act on it. Use Signal for anything sensitive.
 
 ## No cost-splitting payments
 

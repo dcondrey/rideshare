@@ -32,6 +32,7 @@ import "./routes/didcomm.js";
 import "./routes/live.js";
 import "./routes/arrivals.js";
 import "./routes/people.js";
+import "./routes/chat.js";
 
 // Seed the attendee allowlist from ./allowlist.csv (only if table is empty).
 import { seedAllowlistIfEmpty } from "./lib/allowlist.js";

@@ -108,4 +108,17 @@ describe("live demo isolation", () => {
     assert.match(page, /Who.+s going/);
     assert.ok(!page.includes(aName), "visitor B never sees visitor A in a shared group");
   });
+
+  it("never shows one visitor's chat message to another", async () => {
+    const a = await visitor();
+    const b = await visitor();
+    const text = `visitor-a-message-${Math.random()}`;
+    await a.fetch("/chat", {
+      method: "POST",
+      headers: FORM,
+      body: new URLSearchParams({ body: text }).toString(),
+    });
+    assert.match(await (await a.fetch("/chat")).text(), new RegExp(text.replace(".", "\\.")));
+    assert.ok(!(await (await b.fetch("/chat")).text()).includes(text));
+  });
 });

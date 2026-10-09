@@ -43,6 +43,7 @@ Known unmitigated threats are [Residual risks](#residual-risks), not out of scop
 | A7 | Magic-link tokens (in flight) | High for 15 min | `data/app.db` table `magic_links`, deleted on use | n/a: short-lived |
 | A8 | Session IDs | High while valid | `data/app.db` table `sessions`, opaque random | Yes: delete the row |
 | A9 | Issued Verifiable Credentials (JWS) | Public, cryptographically bound | With the holder | n/a: public |
+| A11 | Chat and direct messages | Medium-High | `data/app.db` tables `chat_messages`, `direct_messages`, `blocks`, `reports` | No |
 | A10 | Live location (opt-in sharing) | High while shared | Server memory only: latest point per user, 2-minute expiry | Partly: stale fast, but a past position can reveal a hotel |
 
 A1 rows are `HMAC(server_secret, lower(email))`. A DB insider can test guessed emails but not read the list (T-A1-I2; see also [T-A1-I1](#a1-id)).
@@ -226,6 +227,19 @@ Append-only record of privileged actions for forensics.
   *Mitigation:* every audit-writing path is rate-limited or admin-gated.
 
 EoP: N/A.
+
+### Asset A11: chat and direct messages
+
+Code: `lib/chat.js`, `routes/chat.js`. Stored in the clear behind access checks so organizers can act on reports; not end-to-end encrypted, and the UI says so.
+
+- **T-A11-I1**: A direct message reaches someone other than its recipient.
+  *Mitigation:* pages and the live stream select by sender/recipient pair; the `dm` event goes only to the recipient's streams. `tests/e2e/chat.test.js`.
+- **T-A11-S1**: Unsolicited messages from strangers.
+  *Mitigation:* you can start a conversation only with someone listed in the directory, a ride partner, or someone who wrote to you. Blocks work both ways and also hide room posts. New conversations are limited to 10 an hour.
+- **T-A11-D1**: Spam or abuse in the room.
+  *Mitigation:* 8 room posts and 20 messages a minute per user, 500 characters each; report button on every message; organizer queue (`/admin/reports`) to delete or delete-and-mute for 24 hours; every report and moderation action is audited.
+- **T-A11-I2**: In the live demo, visitors read each other's messages.
+  *Mitigation:* `hiddenFrom()` filters the room, conversations and live events; visitors only ever talk to synthetic attendees.
 
 ### Asset A10: live location
 

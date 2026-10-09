@@ -252,6 +252,12 @@ Browsers can't share location in the background, so the page holds a Screen Wake
 
 `/people` is an opt-in attendee directory: name, affiliation, a short bio, a link and the cross-event trust badge. You choose to be listed on your profile (`/me`). Email and contact method never appear there; they stay behind a ride match. In the live demo, visitors see the synthetic attendees and themselves, never each other.
 
+### Chat
+
+`/chat` has one room for everyone and direct messages. You can message anyone listed in the directory, your ride partners, or anyone who wrote to you first. New messages arrive live; the Chat tab shows a dot when one lands elsewhere.
+
+Moderation is built in: block someone (it works both ways), report a message, and organizers get a queue at `/admin/reports` to delete a message or mute its author for a day. Messages are rate-limited and capped at 500 characters. They're stored on the server and are not end-to-end encrypted.
+
 ### Cost, CO2, luggage and trip safety
 
 - **Cost and CO2.** Each ride page estimates the fare split and the CO2 saved by sharing (one car instead of several, or transit instead of cars). Straight-line distance times a road factor and flat rates, labeled as an estimate. Code: `lib/estimates.js`.

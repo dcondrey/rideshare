@@ -141,15 +141,17 @@ export function renderShell(ctx) {
           ${navItem("/rides", "Rides", "≡")}
           ${navItem("/rides/mine", "Mine", "◎")}
           ${navItem("/people", "People", "☺")}
-          ${navItem("/arrivals", "Arrivals", "⇣")}
+          ${navItem("/chat", "Chat", "✉")}
           <details class="shell-more">
             <summary class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">⋯</span><span>More</span></summary>
             <div class="shell-more-menu">
+              ${navItem("/arrivals", "Arrivals", "⇣")}
               ${navItem("/me", "Profile", "✎")}
               ${navItem("/trust", "Trust", "✓")}
               ${navItem("/verify", "Verify", "⌕")}
               ${navItem("/trust/didcomm", "DIDComm", "⇄")}
               ${user.isAdmin ? navItem("/admin", "Admin", "⚙") : ""}
+              ${user.isAdmin ? navItem("/admin/reports", "Reports", "⚑") : ""}
               <form method="post" action="/auth/signout" class="shell-signout">
                 <button type="submit" class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">⎋</span><span>Sign out</span></button>
               </form>
