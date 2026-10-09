@@ -1687,11 +1687,16 @@ fieldset legend {
 	.shell-live {
 		margin-left: 0;
 	}
+	.is-shell {
+		--shell-nav-h: calc(68px + env(safe-area-inset-bottom));
+	}
 	.shell-nav {
 		top: auto;
 		left: 0;
 		right: 0;
 		bottom: 0;
+		min-height: var(--shell-nav-h);
+		box-sizing: border-box;
 		transform: none;
 		flex-direction: row;
 		justify-content: space-around;
@@ -1708,18 +1713,20 @@ fieldset legend {
 	.is-shell .tm-controls {
 		bottom: calc(140px + env(safe-area-inset-bottom));
 	}
+	/* The sheet sits on top of the bottom nav bar, so you can switch sections
+	   without closing it first. */
 	.panel {
 		top: auto;
 		left: 0;
 		right: 0;
-		bottom: 0;
+		bottom: var(--shell-nav-h);
 		width: 100%;
-		height: 62vh;
+		height: calc(62vh - var(--shell-nav-h));
 		border-radius: 20px 20px 0 0;
 		transition: height 0.2s ease;
 	}
 	.panel.is-expanded {
-		height: 94vh;
+		height: calc(94vh - var(--shell-nav-h));
 	}
 	.panel-grip {
 		display: block;
@@ -2096,4 +2103,75 @@ fieldset legend {
 	width: 100%;
 	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 	font-size: 0.85rem;
+}
+
+/* ── More menu, people directory ─────────────────────────────────────────── */
+.shell-more {
+	position: relative;
+}
+.shell-more > summary {
+	list-style: none;
+}
+.shell-more > summary::-webkit-details-marker {
+	display: none;
+}
+.shell-more[open] > summary {
+	background: var(--surface-2);
+	color: var(--text);
+}
+.shell-more-menu {
+	position: absolute;
+	left: calc(100% + 10px);
+	bottom: -0.4rem;
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 0.15rem;
+	padding: 0.4rem;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+	min-width: 160px;
+}
+@media (max-width: 720px) {
+	.shell-more {
+		flex: 1;
+		display: flex;
+	}
+	.shell-more > summary {
+		flex: 1;
+	}
+	.shell-more-menu {
+		left: auto;
+		right: 0;
+		bottom: calc(100% + 10px);
+		grid-template-columns: repeat(3, 1fr);
+		min-width: 240px;
+	}
+}
+.people-grid {
+	list-style: none;
+	padding: 0;
+	margin: 1rem 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+	gap: 0.75rem;
+}
+.person-card {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.3rem 0.5rem;
+	padding: 0.9rem 1rem;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+}
+.person-card p {
+	flex-basis: 100%;
+	margin: 0.25rem 0 0;
+	font-size: 0.9rem;
+}
+.person-name {
+	font-weight: 700;
 }

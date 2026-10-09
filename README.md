@@ -248,6 +248,10 @@ Browsers can't share location in the background, so the page holds a Screen Wake
 - **Trip status.** People on a ride can post "running late (25 min)", "missed a connection", "arrived" and so on, with a note. Partners get it instantly as a toast on the map; nobody else sees it.
 - **Arrivals board** (`/arrivals`). People landing and leaving per airport and hour, with late and missed counts. Counts only, no names.
 
+### People
+
+`/people` is an opt-in attendee directory: name, affiliation, a short bio, a link and the cross-event trust badge. You choose to be listed on your profile (`/me`). Email and contact method never appear there; they stay behind a ride match. In the live demo, visitors see the synthetic attendees and themselves, never each other.
+
 ### Cost, CO2, luggage and trip safety
 
 - **Cost and CO2.** Each ride page estimates the fare split and the CO2 saved by sharing (one car instead of several, or transit instead of cars). Straight-line distance times a road factor and flat rates, labeled as an estimate. Code: `lib/estimates.js`.

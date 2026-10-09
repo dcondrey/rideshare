@@ -25,6 +25,7 @@ import { getEventConfig } from "../lib/event-config.js";
 import { html, layout } from "../lib/html.js";
 import { notifyRide } from "../lib/live.js";
 import { listMeetups } from "../lib/meetups.js";
+import { getProfile, updatePublicProfile } from "../lib/people.js";
 import { rateLimit } from "../lib/rate-limit.js";
 import {
   browseRides,
@@ -63,6 +64,7 @@ import {
   reqString,
   ValidationError,
 } from "../lib/validate.js";
+import { hiddenFrom } from "../lib/visibility.js";
 import { demoRidesPanel } from "./demo.js";
 
 // Helpers ────────────────────────────────────────────────────────────────────
@@ -184,6 +186,7 @@ get("/rides", async (ctx) => {
     airport: filters.airport === "any" ? "any" : filters.airport,
     date: filters.date === "any" ? "any" : filters.date,
     feature: filters.feature,
+    viewerId: user.id,
   });
   ctx.html(
     layout({
@@ -585,12 +588,14 @@ get("/rides/:id", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
   const ride = getRide(parseInt(ctx.params.id, 10));
-  if (!ride) {
+  if (!ride || hiddenFrom(user.id, ride.user_id)) {
     ctx.error("That ride doesn't exist (or was cancelled).", 404);
     return;
   }
   const isOwner = ride.user_id === user.id;
-  const claims = isOwner ? claimsForRide(ride.id) : [];
+  const claims = isOwner
+    ? claimsForRide(ride.id).filter((c) => !hiddenFrom(user.id, c.claimer_id))
+    : [];
   const myClaim = !isOwner
     ? (claimsByUser(user.id).find((c) => c.ride_id === ride.id) ?? null)
     : null;
@@ -741,11 +746,13 @@ function groupMembersCard(ride, viewerId) {
         )
         .all(ride.id)
     );
+  // In the live demo another visitor in the same group stays invisible.
+  const shown = members.filter((m) => !hiddenFrom(viewerId, m.id));
   return html`
     <section class="card">
-      <h2>Who's going (${members.length})</h2>
+      <h2>Who's going (${shown.length})</h2>
       <ul class="member-list">
-        ${members.map(
+        ${shown.map(
           (m) => html`<li>
             <strong>${m.name || maskEmail(m.email)}</strong>${m.organizer ? html` <span class="muted small">organizer</span>` : ""}
             ${m.id === viewerId ? html` <span class="muted small">(you)</span>` : html`<span class="muted small">${m.contact || m.email}</span>`}
@@ -763,7 +770,7 @@ function groupMembersCard(ride, viewerId) {
 function tripStatusCard(ride, viewerId) {
   const people = rideParticipants(ride.id);
   if (!people.has(viewerId) || people.size < 2) return "";
-  const updates = latestRideUpdates(ride.id);
+  const updates = latestRideUpdates(ride.id).filter((u) => !hiddenFrom(viewerId, u.user_id));
   return html`
     <section class="card trip-status" id="trip-status">
       <h2>Trip status</h2>
@@ -982,6 +989,11 @@ post("/rides/:id/claim", async (ctx) => {
   if (!user) return;
   if (!withinLimit(ctx, `ride-claim:${user.id}`, 10)) return;
   const rideId = parseInt(ctx.params.id, 10);
+  const target = getRide(rideId);
+  if (!target || hiddenFrom(user.id, target.user_id)) {
+    ctx.error("That ride doesn't exist (or was cancelled).", 404);
+    return;
+  }
   const body = await ctx.formBody();
   const seats = reqInt(body.seats ?? "1", "seats", { min: 1, max: 8 });
   const message = optString(body.message, "message", { max: 300 });
@@ -1053,6 +1065,7 @@ post("/claims/:id/withdraw", async (ctx) => {
 get("/me", async (ctx) => {
   const user = requireUser(ctx);
   if (!user) return;
+  const profile = getProfile(user.id, user.id);
   ctx.html(
     layout({
       title: "Your profile",
@@ -1074,6 +1087,21 @@ get("/me", async (ctx) => {
                    placeholder="e.g. Signal: +1 555 123-4567 · or @handle on X">
           </label>
           <p class="muted small">Your email (${user.email}) is always usable as a fallback contact.</p>
+          <fieldset class="stacked">
+            <legend>Public profile <span class="muted">(directory)</span></legend>
+            <label class="check"><input type="checkbox" name="listed" value="1" ${profile?.listed ? "checked" : ""}>
+              List me in the attendee directory</label>
+            <label><span>Affiliation <span class="muted">(optional)</span></span>
+              <input type="text" name="affiliation" maxlength="80" value="${profile?.affiliation ?? ""}" placeholder="Company, project or independent">
+            </label>
+            <label><span>About you <span class="muted">(optional)</span></span>
+              <textarea name="bio" maxlength="280" rows="2" placeholder="What you're demoing or want to talk about">${profile?.bio ?? ""}</textarea>
+            </label>
+            <label><span>Link <span class="muted">(optional, https://)</span></span>
+              <input type="url" name="link" maxlength="200" value="${profile?.link ?? ""}" placeholder="https://">
+            </label>
+            <p class="muted small">The directory shows your name, affiliation, bio, link and trust badge. Never your email or contact method.</p>
+          </fieldset>
           <div class="form-actions">
             <a href="/rides" class="link">Cancel</a>
             <button type="submit" class="button button-primary">Save</button>
@@ -1093,6 +1121,12 @@ post("/me", async (ctx) => {
     max: 200,
   });
   updateUserProfile(user.id, { displayName, contactMethod });
+  updatePublicProfile(user.id, {
+    bio: optString(body.bio, "bio", { max: 280 }),
+    affiliation: optString(body.affiliation, "affiliation", { max: 80 }),
+    link: optString(body.link, "link", { max: 200 }),
+    listed: body.listed === "1",
+  });
   ctx.redirect("/rides/mine");
 });
 

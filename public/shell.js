@@ -193,6 +193,15 @@
     else if (current) close({ push: false });
   });
 
+  // The More menu closes after a pick and on any click outside it.
+  const more = document.querySelector(".shell-more");
+  document.addEventListener("click", (e) => {
+    if (!more?.hasAttribute("open")) return;
+    const t = /** @type {Node} */ (e.target);
+    if (!more.contains(t) || more.querySelector(".shell-more-menu")?.contains(t))
+      more.removeAttribute("open");
+  });
+
   // Map layer filters.
   for (const chip of document.querySelectorAll(".shell-filters [data-layer]")) {
     chip.addEventListener("click", () => {

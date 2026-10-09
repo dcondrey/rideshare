@@ -135,6 +135,10 @@ Free-text profile fields the attendee edits.
   *Mitigation:* profile mutations audited.
 - **T-A2-I1**: Public list of attendee contacts.
   *Mitigation:* shown only to signed-in attendees in the same ride or meetup.
+- **T-A2-I4**: The attendee directory exposes contacts or unwilling attendees.
+  *Mitigation:* opt-in (`users.listed`, default off); shows name, affiliation, bio, an http(s)-only link (`rel="nofollow ugc noopener"`) and the trust badge, never email or contact method (`lib/people.js`, `tests/e2e/people.test.js`).
+- **T-A2-I5**: In the live demo (open sign-in), one visitor sees another's name, rides, position or status.
+  *Mitigation:* `hiddenFrom()` in `lib/visibility.js` filters browse, map data, ride pages, claims, group members, trip status, live positions and the directory. `tests/e2e/demo-isolation.test.js`.
 - **T-A2-I2**: SQL injection.
   *Mitigation:* all queries parameterised (`db.prepare(...).run(...)`); review checklist forbids concatenated SQL.
 - **T-A2-I3**: Scraping via search.

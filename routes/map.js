@@ -22,6 +22,7 @@ get("/map", async (ctx) => {
   const styles = listStyles();
   const { mapData, requested, style, meetupPins, venuePin, ridePins } = buildMapData(
     ctx.query.style,
+    ctx.user.id,
   );
 
   ctx.html(
@@ -92,7 +93,7 @@ get("/map/data.json", async (ctx) => {
     return;
   }
   ctx.res.setHeader("Cache-Control", "no-store");
-  ctx.json(buildMapData(undefined).mapData);
+  ctx.json(buildMapData(undefined, ctx.user.id).mapData);
 });
 
 /** @param {string} href @param {string} label @param {string} icon */
@@ -106,7 +107,7 @@ const navItem = (href, label, icon) =>
 export function renderShell(ctx) {
   const user = /** @type {NonNullable<typeof ctx.user>} */ (ctx.user);
   const event = getEventConfig();
-  const { mapData } = buildMapData(undefined);
+  const { mapData } = buildMapData(undefined, user.id);
   const logo = event.brand?.logoPath || null;
   ctx.html(
     layout({
@@ -139,14 +140,21 @@ export function renderShell(ctx) {
         <nav class="shell-nav" aria-label="Primary">
           ${navItem("/rides", "Rides", "≡")}
           ${navItem("/rides/mine", "Mine", "◎")}
+          ${navItem("/people", "People", "☺")}
           ${navItem("/arrivals", "Arrivals", "⇣")}
-          ${navItem("/trust", "Trust", "✓")}
-          ${navItem("/verify", "Verify", "⌕")}
-          ${navItem("/trust/didcomm", "DIDComm", "⇄")}
-          ${user.isAdmin ? navItem("/admin", "Admin", "⚙") : ""}
-          <form method="post" action="/auth/signout" class="shell-signout">
-            <button type="submit" class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">⎋</span><span>Sign out</span></button>
-          </form>
+          <details class="shell-more">
+            <summary class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">⋯</span><span>More</span></summary>
+            <div class="shell-more-menu">
+              ${navItem("/me", "Profile", "✎")}
+              ${navItem("/trust", "Trust", "✓")}
+              ${navItem("/verify", "Verify", "⌕")}
+              ${navItem("/trust/didcomm", "DIDComm", "⇄")}
+              ${user.isAdmin ? navItem("/admin", "Admin", "⚙") : ""}
+              <form method="post" action="/auth/signout" class="shell-signout">
+                <button type="submit" class="shell-nav-item"><span class="shell-nav-icon" aria-hidden="true">⎋</span><span>Sign out</span></button>
+              </form>
+            </div>
+          </details>
         </nav>
 
         <a href="/rides/new" class="shell-fab"><span aria-hidden="true">+</span> Post a ride</a>
