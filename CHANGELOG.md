@@ -6,12 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Add a live demo mode and repair the credential flow
 - Validate the event config at load and untrack the live one
 - Key ride confirmations and issued credentials by claim
 - Add key custody, SSRF-safe fetch, event schema, banner, seo and health modules
 - Initial release of event rideshare platform
 
 ### Documentation
+- Lead the README with the demo and the DID/VC design
+- Update changelog [skip ci]
 - Standardize README header (#14)
 - Update changelog [skip ci]
 - Update changelog [skip ci]
