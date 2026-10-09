@@ -73,7 +73,7 @@ get("/trust", async (ctx) => {
       children: html`
         <section class="page-head">
           <h1>Portable trust</h1>
-          <a class="link" href="/trust/verify">Verifier playground →</a>
+          <span><a class="link" href="/verify">Verify an attendee</a> · <a class="link" href="/trust/verify">Verifier playground →</a></span>
         </section>
 
         <section class="trust-explainer card">
@@ -199,7 +199,7 @@ get("/trust", async (ctx) => {
                         <legend>Ride credential, issued ${new Date(c.issued_at).toISOString().slice(0, 10)}</legend>
                         ${sortDisclosures(describeDisclosures(c.sd_jwt)).map(
                           (d) => html`<label class="sd-claim">
-                            <input type="checkbox" value="${d.disclosure}" ${d.path[0] === "event" || d.path[0] === "role" ? "checked" : ""}>
+                            <input type="checkbox" value="${d.disclosure}" data-path="${d.path.join(".")}" ${d.path[0] === "event" || d.path[0] === "role" ? "checked" : ""}>
                             <code>${d.path.join(".")}</code>
                             <span class="muted">${typeof d.value === "string" ? d.value : JSON.stringify(d.value)}</span>
                           </label>`,
@@ -217,6 +217,21 @@ get("/trust", async (ctx) => {
           <form id="sd-verify-form" method="post" action="/trust/verify" hidden>
             <input type="hidden" name="jwt">
           </form>
+        </section>
+
+        <section class="card" id="answer-request">
+          <h2>Answer a presentation request (OpenID4VP)</h2>
+          <p class="muted">
+            Paste an <code>openid4vp://</code> link from a verifier, such as the
+            one <a href="/verify">Verify an attendee</a> creates. This site checks
+            the request's signature against the verifier's DID, then your browser
+            sends only the claims it asks for, signed with your <code>did:key</code>.
+          </p>
+          <form id="oid4vp-holder" class="stacked">
+            <textarea rows="3" required placeholder="openid4vp://?client_id=decentralized_identifier%3Adid%3Aweb%3A…">${ctx.query.request || ""}</textarea>
+            <button type="submit" class="button">Inspect the request</button>
+          </form>
+          <div id="oid4vp-holder-result" aria-live="polite"></div>
         </section>
 
         <section class="card">

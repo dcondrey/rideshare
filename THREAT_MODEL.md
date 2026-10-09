@@ -436,6 +436,11 @@ See [`docs/security/ssrf.md`](docs/security/ssrf.md) for details.
 **Threat:** someone photographs a credential offer QR code, guesses the PIN, replays a pre-authorized code, access token or proof, or gets a credential bound to their own key for someone else's ride.
 **Mitigation:** the offer only re-issues the attendee's own credential, and the PIN (rendered once in the POST response, never stored in clear) is required at the token endpoint. Five wrong PINs burn the code, and the attempt counter commits even when the request fails. Code, token and nonce are single-use and short-lived, and the token endpoint is rate-limited per IP. Proof JWTs must carry the issuer as `aud`, a fresh `iat` and a live single-use nonce, and their signature must verify with the key they bind. Residual: whoever holds both the QR code and the PIN within ten minutes gets the credential, which is the pre-authorized flow's trust model. Tests: `tests/e2e/oid4vci.test.js`.
 
+### CC-14: Spoofed verifiers and replayed OpenID4VP responses
+
+**Threat:** a page impersonates a verifier to harvest claims; a captured `vp_token` is replayed to the same or another verifier; someone posts a response for a request they did not receive; a forged request makes the in-app holder post claims to an attacker's endpoint.
+**Mitigation:** requests are signed by the verifier's did:web key (`decentralized_identifier` prefix), and the in-app holder checks that signature against the DID document's `assertionMethod` before showing the request, then sends only the requested claims. A response is accepted only for a live, unanswered `state`; the key binding must name the full client identifier as `aud` and carry that request's `nonce`, so a presentation made for one verifier or request fails at any other; each request settles once with an atomic status update. Status reads need the unguessable request id. Remote requests are fetched through `lib/safe-fetch.js`. Residual: the holder trusts whatever verifier controls the DID's domain, the usual did:web assumption. Tests: `tests/e2e/oid4vp.test.js`.
+
 ---
 
 ## In-scope vs out-of-scope

@@ -197,6 +197,7 @@ payload). Its issuer key no longer exists, so it is for reading, not verifying:
 | Securing | VC-JWT, EdDSA ([RFC 8032](https://www.rfc-editor.org/rfc/rfc8032)) | **Deviation:** VC-JWT 1.1 shape, with the credential in a `vc` claim next to `iss`/`sub`/`nbf`/`jti`, while the header says `typ: vc+jwt`, the [VC-JOSE-COSE](https://www.w3.org/TR/vc-jose-cose/) media type, whose payload is the bare credential. A strict VC-JOSE-COSE verifier will see that mismatch; it has to read the `vc` claim to accept these |
 | Signatures | Ed25519, ES256 | Node's built-in `crypto`, verified against RFC 8032 test vectors. ES256 (P-256) signs SD-JWT VCs |
 | Issuance to wallets | [OpenID4VCI 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) | Pre-authorized code flow with a PIN, nonce endpoint, `jwt` proofs (ES256 or Ed25519), format `dc+sd-jwt`. Not implemented: authorization code flow, DPoP, key attestations, deferred issuance, so not HAIP |
+| Presentation | [OpenID4VP 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) | `decentralized_identifier` client id with an ES256-signed request object by reference, DCQL, `direct_post`, `dc+sd-jwt` with key binding. Not implemented: `x509_hash`, `direct_post.jwt`, the Digital Credentials API |
 | Selective disclosure | [SD-JWT, RFC 9901](https://www.rfc-editor.org/rfc/rfc9901) + [SD-JWT VC draft-19](https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/) | Followed. Every ride credential is also issued as a `dc+sd-jwt` bound to the holder's `did:key` via `cnf.jwk`; the holder picks claims on `/trust` and signs a KB-JWT with a verifier nonce. Tested against the RFC's own digest vectors. Issuer keys at `/.well-known/jwt-vc-issuer`; `x5c` chains are not supported |
 
 ### Issue to a wallet (OpenID4VCI)
@@ -214,6 +215,24 @@ is tested end to end with a scripted wallet; it does not implement HAIP's
 X.509 chains, wallet attestation, DPoP or authorization-code flow, so strict
 HAIP wallets may refuse it.
 
+### Verify a wallet (OpenID4VP)
+
+`/verify` creates an [OpenID4VP 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)
+presentation request and shows it as a QR code. The client identifier is
+`decentralized_identifier:<this event's did:web>`, and the request object
+(`typ: oauth-authz-req+jwt`) is signed with the DID's ES256 key, so a wallet
+authenticates the verifier by resolving the DID document. A DCQL query asks for
+one ride credential and only `event.name` and `role`. The wallet answers by
+`direct_post`; the page polls and shows the verified claims. The checks are
+the issuer signature, the key binding (`aud` must be the full client
+identifier), the request's nonce, the accepted `vct`, and single use.
+
+The browser holder on `/trust` can answer too: paste the `openid4vp://` link,
+and this server fetches the request and checks its signature against the
+verifier's DID document before the browser sends exactly the requested claims.
+HAIP's `x509_hash` client identifiers and encrypted `direct_post.jwt`
+responses are not implemented.
+
 ### Selective disclosure
 
 Each ride credential has an SD-JWT VC twin with every ride and counterpart
@@ -227,7 +246,7 @@ next to how many digests stayed hidden (withheld claims and decoys look the
 same). Replaying a presentation fails on the spent nonce.
 
 **Not implemented (yet):** status lists or any revocation, BBS proofs, Data
-Integrity proofs, OpenID4VP presentation, DIDComm, and HAIP conformance. Credentials carry no `exp`, and a deployment
+Integrity proofs, DIDComm, and HAIP conformance. Credentials carry no `exp`, and a deployment
 publishes a single Ed25519 key, so rotating it makes every earlier VC-JWT
 unverifiable. The
 [TRUST.md](./TRUST.md) roadmap covers counter-signed credentials (the

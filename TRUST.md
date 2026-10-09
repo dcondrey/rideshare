@@ -313,6 +313,19 @@ server and accepts token requests without a client id.
 | Nonce | `POST /oid4vci/nonce` | `c_nonce`, single-use, five minutes |
 | Credential | `POST /oid4vci/credential` | `credential_configuration_id` + `proofs.jwt[1]`; the proof's `typ` must be `openid4vci-proof+jwt`, with exactly one of `jwk`/`kid` (`did:key` only), `aud` = the issuer URL, `iat` within five minutes and a live nonce. Returns `{credentials:[{credential}]}` with an SD-JWT VC bound to the proof key; the token is single-use |
 
+## Presentation to a verifier (OpenID4VP)
+
+`lib/oid4vp.js` and `routes/oid4vp.js` make each deployment an OpenID4VP 1.0
+verifier.
+
+| Step | Endpoint | Rule |
+|---|---|---|
+| Request | `POST /verify/request` | 10-minute request with fresh `state` and `nonce`; QR of `openid4vp://?client_id=decentralized_identifier:<did>&request_uri=…` |
+| Request object | `GET /oid4vp/request/:id` | `application/oauth-authz-req+jwt`, header `typ: oauth-authz-req+jwt`, `alg: ES256`, `kid: <did>#key-2`; payload `client_id`, `response_type: vp_token`, `response_mode: direct_post`, `response_uri`, `nonce`, `state`, `dcql_query`, `client_metadata.vp_formats_supported`; gone once answered or expired |
+| Response | `POST /oid4vp/response` | `vp_token` must map the DCQL credential id to one SD-JWT VC presentation; KB-JWT `aud` = the full prefixed client id, `nonce` = the request's; `vct` must be this deployment's; settles once |
+| Status | `GET /oid4vp/status/:id` | The request id is the capability; returns the verified claims |
+| In-app holder | `POST /trust/oid4vp/inspect` | Fetches a request (locally, or via `safe-fetch`), checks `typ`, that `kid` belongs to the client id's DID, and the signature against that DID's `assertionMethod` key; the browser then signs and posts only the requested claims |
+
 ## Spec versions and interoperability decisions
 
 Verified against primary sources on 2026-10-08. These decide how the

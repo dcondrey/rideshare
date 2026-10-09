@@ -34,6 +34,35 @@
     }
   });
 
+  // OpenID4VP: poll a presentation request until a wallet answers it.
+  const pending = document.querySelector("[data-oid4vp-status]");
+  if (pending) {
+    const id = pending.getAttribute("data-oid4vp-status");
+    const show = (s) => {
+      const p = document.createElement("p");
+      p.className = s.status === "verified" ? "check-pass" : "check-fail";
+      p.textContent =
+        s.status === "verified"
+          ? "Verified: the wallet proved a ride credential from this event."
+          : s.status === "expired"
+            ? "The request expired."
+            : `Failed: ${(s.errors || []).join("; ") || "the presentation did not verify"}`;
+      pending.replaceChildren(p);
+      if (s.status === "verified") {
+        const pre = document.createElement("pre");
+        pre.className = "code-block";
+        pre.textContent = JSON.stringify(s.claims, null, 2);
+        pending.append(pre);
+      }
+    };
+    const tick = () =>
+      fetch(`/oid4vp/status/${encodeURIComponent(id)}`)
+        .then((r) => r.json())
+        .then((s) => (s.status === "pending" ? setTimeout(tick, 2000) : show(s)))
+        .catch(() => setTimeout(tick, 4000));
+    setTimeout(tick, 2000);
+  }
+
   // 1. Reveal "other place" input when the airport selector is set to OTHER.
   const sel = document.getElementById("airport-select");
   const otherLabel = document.getElementById("other-place-label");

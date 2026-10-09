@@ -461,6 +461,28 @@
   // JWT over them with the did:key private key the credential is bound to
   // (cnf.jwk). aud and nonce come from the verifier, so the presentation is
   // good for that verifier, once.
+  function buildPresentation(sdJwt, disclosures, aud, nonce) {
+    const presented = `${sdJwt.split("~")[0]}~${disclosures.map((d) => `${d}~`).join("")}`;
+    return Promise.all([
+      loadKey(),
+      crypto.subtle.digest("SHA-256", new TextEncoder().encode(presented)),
+    ]).then(([rec, hash]) => {
+      if (!rec) {
+        throw new Error(
+          "No key in this browser. Create your DID, or restore its backup: the presentation must be signed by the key the credential is bound to.",
+        );
+      }
+      const enc = (o) => bytesToB64u(new TextEncoder().encode(JSON.stringify(o)));
+      const input = `${enc({ alg: "Ed25519", typ: "kb+jwt" })}.${enc({
+        iat: Math.floor(Date.now() / 1000),
+        aud,
+        nonce,
+        sd_hash: bytesToB64u(hash),
+      })}`;
+      return signWithKey(rec.keyPair, input).then((sig) => `${presented}${input}.${sig}`);
+    });
+  }
+
   function bindSdPresent(form, verifyForm) {
     const status = form.querySelector("[data-sd-status]");
     form.addEventListener("submit", (e) => {
@@ -468,40 +490,107 @@
       const say = (t) => {
         if (status) status.textContent = t;
       };
-      const sdJwt = form.dataset.sdJwt || "";
       const chosen = Array.prototype.filter
         .call(form.querySelectorAll("input[type=checkbox]"), (c) => c.checked)
         .map((c) => c.value);
-      const presented = `${sdJwt.split("~")[0]}~${chosen.map((d) => `${d}~`).join("")}`;
       say("Signing…");
-      Promise.all([
-        loadKey(),
-        fetch("/trust/verify/nonce", { method: "POST" }).then((r) => {
+      fetch("/trust/verify/nonce", { method: "POST" })
+        .then((r) => {
           if (!r.ok) throw new Error(`nonce request failed (${r.status})`);
           return r.json();
-        }),
-        crypto.subtle.digest("SHA-256", new TextEncoder().encode(presented)),
-      ])
-        .then(([rec, verifier, hash]) => {
-          if (!rec) {
-            throw new Error(
-              "No key in this browser. Create your DID, or restore its backup: the presentation must be signed by the key the credential is bound to.",
-            );
-          }
-          const enc = (o) => bytesToB64u(new TextEncoder().encode(JSON.stringify(o)));
-          const input = `${enc({ alg: "Ed25519", typ: "kb+jwt" })}.${enc({
-            iat: Math.floor(Date.now() / 1000),
-            aud: verifier.aud,
-            nonce: verifier.nonce,
-            sd_hash: bytesToB64u(hash),
-          })}`;
-          return signWithKey(rec.keyPair, input).then((sig) => `${presented}${input}.${sig}`);
         })
+        .then((v) => buildPresentation(form.dataset.sdJwt || "", chosen, v.aud, v.nonce))
         .then((presentation) => {
           verifyForm.querySelector("input[name=jwt]").value = presentation;
           verifyForm.submit();
         })
         .catch((err) => say(err.message || String(err)));
+    });
+  }
+
+  // ── OpenID4VP holder: answer a verifier's request from this browser ───────
+  function vctOf(sdJwt) {
+    try {
+      const p = sdJwt.split("~")[0].split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      return JSON.parse(atob(p)).vct;
+    } catch {
+      return null;
+    }
+  }
+
+  function bindOid4vpHolder(form, out) {
+    const say = (cls, text) => {
+      const p = document.createElement("p");
+      p.className = cls;
+      p.textContent = text;
+      out.replaceChildren(p);
+      return p;
+    };
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const url = form.querySelector("textarea").value.trim();
+      say("muted", "Fetching and verifying the request…");
+      fetch("/trust/oid4vp/inspect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      })
+        .then((r) => r.json())
+        .then((req) => {
+          if (req.error) throw new Error(req.error);
+          const sdForm = Array.prototype.find.call(
+            document.querySelectorAll("form[data-sd-jwt]"),
+            (f) => req.vctValues.includes(vctOf(f.dataset.sdJwt || "")),
+          );
+          if (!sdForm)
+            throw new Error("You hold no credential of the type this verifier asks for.");
+          const wanted = req.claims.map((p) => p.join("."));
+          const boxes = Array.prototype.filter.call(
+            sdForm.querySelectorAll("input[type=checkbox]"),
+            (c) => wanted.includes(c.dataset.path),
+          );
+          const intro = say("", "");
+          intro.append(
+            `Signed request from `,
+            Object.assign(document.createElement("code"), { textContent: req.verifier }),
+          );
+          intro.append(`. It asks for: ${wanted.join(", ")}. Nothing else is sent.`);
+          const btn = Object.assign(document.createElement("button"), {
+            type: "button",
+            className: "button button-primary",
+            textContent: `Share ${boxes.length} claim${boxes.length === 1 ? "" : "s"}`,
+          });
+          out.append(btn);
+          btn.addEventListener("click", () => {
+            btn.disabled = true;
+            buildPresentation(
+              sdForm.dataset.sdJwt,
+              boxes.map((b) => b.value),
+              req.clientId,
+              req.nonce,
+            )
+              .then((pres) =>
+                fetch(req.responseUri, {
+                  method: "POST",
+                  headers: { "content-type": "application/x-www-form-urlencoded" },
+                  body: new URLSearchParams({
+                    vp_token: JSON.stringify({ [req.credentialQueryId]: [pres] }),
+                    state: req.state,
+                  }).toString(),
+                }),
+              )
+              .then((r) =>
+                say(
+                  r.ok ? "check-pass" : "check-fail",
+                  r.ok
+                    ? "Shared. The verifier accepted the response."
+                    : `The verifier answered ${r.status}.`,
+                ),
+              )
+              .catch((err) => say("check-fail", err.message || String(err)));
+          });
+        })
+        .catch((err) => say("check-fail", err.message || String(err)));
     });
   }
 
@@ -541,6 +630,10 @@
     if (form && ta && file && pick && results) {
       bindImportForm(form, ta, file, pick, results);
     }
+
+    const holder = document.getElementById("oid4vp-holder");
+    const holderOut = document.getElementById("oid4vp-holder-result");
+    if (holder && holderOut) bindOid4vpHolder(holder, holderOut);
 
     const verifyForm = document.getElementById("sd-verify-form");
     if (verifyForm) {
