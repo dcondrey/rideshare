@@ -58,6 +58,8 @@ body {
 	--success: #15803d;
 	background: var(--surface);
 	color: var(--text);
+	/* Native form controls follow the paper, not the void around it. */
+	color-scheme: light;
 }
 .card a:not(.button),
 .ride-card a:not(.button),

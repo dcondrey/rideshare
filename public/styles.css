@@ -1314,3 +1314,22 @@ fieldset legend {
 	border-color: var(--success);
 	color: #fff;
 }
+
+/* ─── Selective disclosure presenter ──────────────────────────────────── */
+.sd-present fieldset {
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	padding: 0.75rem 1rem;
+	margin: 0 0 0.75rem;
+}
+.sd-claim {
+	display: flex;
+	align-items: baseline;
+	gap: 0.6rem;
+	flex-direction: row;
+	padding: 0.25rem 0;
+	font-size: 0.9rem;
+}
+.sd-claim input {
+	flex: none;
+}

@@ -456,6 +456,55 @@
   }
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
+  // ── Selective disclosure (SD-JWT VC, RFC 9901) ────────────────────────────
+  // The holder keeps only the checked disclosures, then signs a key-binding
+  // JWT over them with the did:key private key the credential is bound to
+  // (cnf.jwk). aud and nonce come from the verifier, so the presentation is
+  // good for that verifier, once.
+  function bindSdPresent(form, verifyForm) {
+    const status = form.querySelector("[data-sd-status]");
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const say = (t) => {
+        if (status) status.textContent = t;
+      };
+      const sdJwt = form.dataset.sdJwt || "";
+      const chosen = Array.prototype.filter
+        .call(form.querySelectorAll("input[type=checkbox]"), (c) => c.checked)
+        .map((c) => c.value);
+      const presented = `${sdJwt.split("~")[0]}~${chosen.map((d) => `${d}~`).join("")}`;
+      say("Signing…");
+      Promise.all([
+        loadKey(),
+        fetch("/trust/verify/nonce", { method: "POST" }).then((r) => {
+          if (!r.ok) throw new Error(`nonce request failed (${r.status})`);
+          return r.json();
+        }),
+        crypto.subtle.digest("SHA-256", new TextEncoder().encode(presented)),
+      ])
+        .then(([rec, verifier, hash]) => {
+          if (!rec) {
+            throw new Error(
+              "No key in this browser. Create your DID, or restore its backup: the presentation must be signed by the key the credential is bound to.",
+            );
+          }
+          const enc = (o) => bytesToB64u(new TextEncoder().encode(JSON.stringify(o)));
+          const input = `${enc({ alg: "Ed25519", typ: "kb+jwt" })}.${enc({
+            iat: Math.floor(Date.now() / 1000),
+            aud: verifier.aud,
+            nonce: verifier.nonce,
+            sd_hash: bytesToB64u(hash),
+          })}`;
+          return signWithKey(rec.keyPair, input).then((sig) => `${presented}${input}.${sig}`);
+        })
+        .then((presentation) => {
+          verifyForm.querySelector("input[name=jwt]").value = presentation;
+          verifyForm.submit();
+        })
+        .catch((err) => say(err.message || String(err)));
+    });
+  }
+
   function ready(fn) {
     if (document.readyState !== "loading") fn();
     else document.addEventListener("DOMContentLoaded", fn);
@@ -491,6 +540,13 @@
     const results = document.getElementById("trust-import-results");
     if (form && ta && file && pick && results) {
       bindImportForm(form, ta, file, pick, results);
+    }
+
+    const verifyForm = document.getElementById("sd-verify-form");
+    if (verifyForm) {
+      Array.prototype.forEach.call(document.querySelectorAll("form[data-sd-jwt]"), (f) =>
+        bindSdPresent(f, verifyForm),
+      );
     }
   });
 })();

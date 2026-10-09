@@ -426,6 +426,11 @@ See [`docs/security/ssrf.md`](docs/security/ssrf.md) for details.
 **Threat:** `event.config.yaml#map.customAttribution` is deliberately admin-settable HTML (operators need to credit a non-default tile provider, which usually requires a link). An admin account takeover, or a malicious value committed to `event.config.yaml`, could otherwise inject script via this field.
 **Mitigation:** the client (`public/map.js`) never assigns it through `innerHTML`. It parses the value with `DOMParser`, then walks the resulting node tree and rebuilds it into the live DOM keeping only text nodes and `<a href="http(s)://...">` elements — every other element, and every attribute on the ones kept other than `href`, is dropped, so event handlers and non-text children never reach the page. Trust boundary: this protects against the field itself being hostile; it does not need to defend against the admin who sets it, since setting it already requires the `U-admin` / `A-admin` role from the [Actors](#actors) table.
 
+### CC-12: Replayed or forged SD-JWT VC presentations
+
+**Threat:** a captured selective-disclosure presentation is replayed to the verifier; a holder adds disclosures the issuer never signed, re-uses one, or rewrites a visible claim through a disclosure; a forger signs with their own key; or an unauthenticated caller floods the nonce table.
+**Mitigation:** `lib/sd-jwt.js` follows RFC 9901 §7: it rejects `alg: none` and any key/alg mismatch, a repeated disclosure or digest, an unreferenced disclosure, and a disclosure that collides with a visible claim or uses a reserved name. Key binding is checked against `cnf.jwk`, with `aud`, a bounded `iat` window and `sd_hash` over the exact presentation. The playground's nonces (`lib/verifier.js`) are single-use, expire after five minutes, and are consumed by one atomic `UPDATE`, so a replay fails; `/trust/verify/nonce` is rate-limited per IP and expired nonces are deleted on each issue. A remote issuer's keys are fetched only through `lib/safe-fetch.js` (see CC-5), and its metadata `issuer` must equal the credential's `iss`. Tests: `tests/unit/sd-jwt.test.js`, `tests/e2e/demo-mode.test.js`.
+
 ---
 
 ## In-scope vs out-of-scope

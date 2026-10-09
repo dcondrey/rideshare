@@ -19,11 +19,14 @@
  *   POST /trust/verify                  → verify any credential, return reasoned result
  */
 
+import { config } from "../lib/config.js";
 import { onRideConfirmed } from "../lib/demo.js";
 import { pubKeyRawBytes } from "../lib/did.js";
 import { errorMessage } from "../lib/errors.js";
 import { html, layout } from "../lib/html.js";
+import { rateLimit } from "../lib/rate-limit.js";
 import { get, post } from "../lib/router.js";
+import { describeDisclosures } from "../lib/sd-jwt.js";
 import {
   bindDid,
   confirmRide,
@@ -32,10 +35,12 @@ import {
   getUserDid,
   importCredential,
   issueDidChallenge,
+  sdJwtCredentialsIssuedTo,
   trustProfileFor,
 } from "../lib/trust.js";
 import { reqString } from "../lib/validate.js";
 import { decodeJwt, verifyCredential } from "../lib/vc.js";
+import { issueVerifierNonce, verifySdJwtVc } from "../lib/verifier.js";
 
 // Shared by /trust/import, /trust/import-bundle and the unauthenticated
 // /trust/verify, so one route cannot become the soft way in.
@@ -57,6 +62,7 @@ get("/trust", async (ctx) => {
   const userDid = getUserDid(user.id);
   const profile = trustProfileFor(user.id);
   const issued = credentialsIssuedTo(user.id);
+  const sdIssued = sdJwtCredentialsIssuedTo(user.id);
   const dep = getDeploymentKey();
 
   ctx.html(
@@ -169,6 +175,44 @@ get("/trust", async (ctx) => {
                 </ul>
                 <a class="button" href="/trust/credentials.json" download>Download all as JSON</a>`
           }
+        </section>
+
+        <section class="card" id="selective-disclosure">
+          <h2>Selective disclosure (SD-JWT VC)</h2>
+          <p class="muted">
+            Each ride credential is also issued as an SD-JWT VC, signed with this
+            event's ES256 key and bound to your <code>did:key</code>. Choose what
+            to reveal: your browser drops the rest and signs a key-binding proof
+            for the verifier, so the presentation can't be replayed elsewhere.
+          </p>
+          ${
+            sdIssued.length === 0
+              ? html`<p class="muted">None yet: they arrive with your ride credentials.</p>`
+              : sdIssued.map(
+                  (c) => html`
+                    <form class="sd-present stacked" data-sd-jwt="${c.sd_jwt}">
+                      <fieldset>
+                        <legend>Ride credential, issued ${new Date(c.issued_at).toISOString().slice(0, 10)}</legend>
+                        ${sortDisclosures(describeDisclosures(c.sd_jwt)).map(
+                          (d) => html`<label class="sd-claim">
+                            <input type="checkbox" value="${d.disclosure}" ${d.path[0] === "event" || d.path[0] === "role" ? "checked" : ""}>
+                            <code>${d.path.join(".")}</code>
+                            <span class="muted">${typeof d.value === "string" ? d.value : JSON.stringify(d.value)}</span>
+                          </label>`,
+                        )}
+                      </fieldset>
+                      <button type="submit" class="button button-primary">Present selected claims to the verifier</button>
+                      <span class="small muted" data-sd-status aria-live="polite"></span>
+                      <details>
+                        <summary>Show the SD-JWT as issued</summary>
+                        <textarea readonly rows="4" class="cred-jwt">${c.sd_jwt}</textarea>
+                      </details>
+                    </form>`,
+                )
+          }
+          <form id="sd-verify-form" method="post" action="/trust/verify" hidden>
+            <input type="hidden" name="jwt">
+          </form>
         </section>
 
         <section class="card">
@@ -369,7 +413,87 @@ post("/rides/:id/confirm", async (ctx) => {
   }
 });
 
+/**
+ * Order a credential's disclosures the way a person reads them: who and what
+ * role first, then the ride, then the event.
+ * @param {{ disclosure: string, path: string[], value: unknown }[]} list
+ */
+function sortDisclosures(list) {
+  const rank = (p) => ["role", "counterpart", "sub", "ride", "event"].indexOf(p[0]) >>> 0;
+  return [...list].sort(
+    (a, b) => rank(a.path) - rank(b.path) || a.path.join(".").localeCompare(b.path.join(".")),
+  );
+}
+
 // ── Verifier playground ────────────────────────────────────────────────────
+// A holder presenting with key binding needs a nonce from this verifier first.
+// Unauthenticated, so rate-limited per IP to bound the nonce table.
+post("/trust/verify/nonce", async (ctx) => {
+  if (!rateLimit(`verify-nonce:${ctx.ip()}`, 60, 60 * 60 * 1000).ok) {
+    ctx.json({ error: "rate_limited" }, 429);
+    return;
+  }
+  const { nonce, expiresAt } = issueVerifierNonce("playground");
+  ctx.res.setHeader("Cache-Control", "no-store");
+  ctx.json({ nonce, aud: config.appUrl, expiresAt });
+});
+
+/**
+ * Render the report for an SD-JWT VC presentation: every check, the claims the
+ * holder disclosed, and how many stayed hidden.
+ * @param {import("../lib/router.js").RouteCtx} ctx
+ * @param {string} presentation
+ */
+async function renderSdJwtReport(ctx, presentation) {
+  const v = await verifySdJwtVc(presentation, { aud: config.appUrl, noncePurpose: "playground" });
+  const r = v.result;
+  const hidden = (() => {
+    let n = 0;
+    /** @param {unknown} node */
+    const count = (node) => {
+      if (!node || typeof node !== "object") return;
+      for (const [k, val] of Object.entries(node)) {
+        if (k === "_sd" && Array.isArray(val)) n += val.length;
+        else count(val);
+      }
+    };
+    count(v.payload);
+    return Math.max(0, n - (r ? r.disclosed.length : 0));
+  })();
+  ctx.html(
+    layout({
+      title: v.ok ? "Verified ✓" : "Verification failed",
+      user: ctx.user,
+      children: html`
+        <section class="page-head">
+          <a class="link" href="/trust/verify">← Verify</a>
+          <h1>${v.ok ? "Verified ✓" : "Verification failed"}</h1>
+        </section>
+        <section class="card">
+          <h2>Checks</h2>
+          <p class="muted small">SD-JWT VC (RFC 9901, draft-ietf-oauth-sd-jwt-vc), typ <code>${String(v.header.typ ?? "?")}</code></p>
+          <ul class="check-list">
+            ${v.checks.map((c) => html`<li class="check-pass">${c}</li>`)}
+            ${v.errors.map((e) => html`<li class="check-fail">${e}</li>`)}
+          </ul>
+        </section>
+        ${
+          r
+            ? html`<section class="card">
+                <h2>What the holder disclosed</h2>
+                <p class="muted">${r.disclosed.length} claim${r.disclosed.length === 1 ? "" : "s"} revealed;
+                  ${hidden} digest${hidden === 1 ? "" : "s"} left undisclosed (withheld claims plus decoys,
+                  indistinguishable by design).</p>
+                <pre class="code-block">${JSON.stringify(r.claims, null, 2)}</pre>
+              </section>`
+            : ""
+        }
+      `,
+    }),
+    v.ok ? 200 : 400,
+  );
+}
+
 get("/trust/verify", async (ctx) => {
   ctx.html(
     layout({
@@ -414,6 +538,10 @@ post("/trust/verify", async (ctx) => {
   // an oversized input. The same cap as /trust/import above.
   if (jwt.length > MAX_JWT_CHARS) {
     ctx.error(`JWT too large (max ${MAX_JWT_CHARS} characters).`, 400);
+    return;
+  }
+  if (jwt.includes("~")) {
+    await renderSdJwtReport(ctx, jwt.trim());
     return;
   }
   const self = getDeploymentKey();

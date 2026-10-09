@@ -117,6 +117,39 @@ describe("live demo (DEMO_MODE=true)", () => {
     ).text();
     assert.match(report, /signature_valid/);
     assert.doesNotMatch(report, /issuer_resolution_failed/);
+
+    // The SD-JWT VC twin: present two claims with key binding, then replay it.
+    const twin = db
+      .prepare("SELECT sd_jwt FROM sd_jwt_credentials WHERE subject_user_id = ?")
+      .get(userId);
+    assert.ok(twin, "an SD-JWT VC was issued beside the VC-JWT");
+    const { presentSdJwt } = await srv.mod("lib/sd-jwt.js");
+    const { nonce, aud } = await (
+      await srv.fetch("/trust/verify/nonce", { method: "POST" })
+    ).json();
+    const presentation = presentSdJwt(
+      twin.sd_jwt,
+      (d) => d.name === "role" || d.name === "airport",
+      {
+        aud,
+        nonce,
+        privateKey,
+      },
+    );
+    const verifyPresentation = async () =>
+      (
+        await srv.fetch("/trust/verify", {
+          method: "POST",
+          headers: FORM,
+          body: new URLSearchParams({ jwt: presentation }).toString(),
+        })
+      ).text();
+    const first = await verifyPresentation();
+    assert.match(first, /key binding valid/);
+    assert.match(first, /nonce fresh and now consumed/);
+    assert.match(first, /&quot;role&quot;/);
+    assert.doesNotMatch(first, /&quot;counterpart&quot;/);
+    assert.match(await verifyPresentation(), /replay/);
   });
 
   it("keeps the shared organizer account read-only", async () => {

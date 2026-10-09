@@ -274,3 +274,46 @@ Things explicitly NOT in v1 but designed to be addable:
 
 All of it is plain JavaScript on Node's built-in `crypto` and the browser's
 WebCrypto. No external libraries.
+
+## Selective disclosure (SD-JWT VC)
+
+Every ride credential is issued twice: the VC-JWT above, and an SD-JWT VC
+(`typ: dc+sd-jwt`) signed with the deployment's ES256 key (`#key-2` in the DID
+document, also published at `/.well-known/jwt-vc-issuer`). The SD-JWT VC names
+the HTTPS origin as `iss`, as SD-JWT VC requires for metadata-based key
+resolution, and binds to the holder's `did:key` through `cnf.jwk`.
+
+| Claim | Disclosure |
+|---|---|
+| `iss`, `vct`, `iat`, `cnf`, `jti` | Always visible (SD-JWT VC forbids disclosing `iss`, `vct`, `cnf`) |
+| `sub` (holder DID), `role`, `counterpart` | Selectively disclosable |
+| `ride.date`, `ride.time`, `ride.airport`, `ride.direction` | Each selectively disclosable |
+| `event.name`, `event.startDate`, `event.endDate` | Each selectively disclosable |
+
+Two decoy digests are added at the top level. The holder presents from `/trust`:
+the browser keeps the chosen disclosures and signs a `kb+jwt` (`alg: Ed25519`)
+over `iat`, `aud`, a verifier `nonce` and `sd_hash`. The playground verifier
+issues the nonce (`POST /trust/verify/nonce`), consumes it once, and resolves a
+foreign issuer's key through its `/.well-known/jwt-vc-issuer` metadata.
+
+Implementation: `lib/jose.js` (JWS, JWK), `lib/sd-jwt.js` (RFC 9901),
+`lib/verifier.js` (nonces, issuer keys), `issueRideSdJwt()` in `lib/trust.js`.
+
+## Spec versions and interoperability decisions
+
+Verified against primary sources on 2026-10-08. These decide how the
+selective-disclosure, OpenID4VC and DIDComm work is built.
+
+| Spec | Version | Consequence here |
+|---|---|---|
+| SD-JWT | RFC 9901 (Nov 2025) | Disclosures, `_sd`, KB-JWT (`typ: kb+jwt`, `sd_hash` over the presentation including its trailing `~`) |
+| SD-JWT VC | draft-ietf-oauth-sd-jwt-vc-19 | `typ: dc+sd-jwt`; `vct` required; `iss`, `nbf`, `exp`, `cnf`, `vct`, `status` never disclosable. Issuer keys resolve through `/.well-known/jwt-vc-issuer` or `x5c`; the draft defines no DID mechanism, so SD-JWT VCs name the HTTPS origin as `iss` and the same keys are also in the DID document |
+| OpenID4VCI | 1.0 Final (Sep 2025) | Issuer identifier is the HTTPS origin; pre-authorized code flow; nonce endpoint (no `c_nonce` in the token response); `proofs.jwt[]` with `typ: openid4vci-proof+jwt`; format `dc+sd-jwt` |
+| OpenID4VP | 1.0 Final (Jul 2025) | DCQL only (Presentation Exchange was removed); `vp_token` keyed by credential query id; KB-JWT `aud` is the full prefixed `client_id` |
+| HAIP | 1.0 Final (Dec 2025) | Requires X.509 issuer chains, wallet-attestation client auth, DPoP and the authorization-code flow, and never mentions DIDs. **This app does not claim HAIP conformance**; it targets plain OpenID4VCI/OpenID4VP with ES256 |
+| DIDComm Messaging | v2.1 (WG approved 2023-04) | Server-to-server between deployments: authcrypt `ECDH-1PU+A256KW` with `A256CBC-HS512` over X25519, anoncrypt `ECDH-ES+A256KW`, Trust Ping 2.0 and Discover Features 2.0 |
+| JOSE algorithm names | IANA registry, RFC 9864 | `EdDSA` is deprecated in favour of `Ed25519`; new tokens say `Ed25519`, both are accepted |
+
+ES256 (P-256) is the SD-JWT VC and OpenID4VC signing algorithm because every
+OpenID4VC wallet profile requires it; the Ed25519 key keeps signing VC-JWTs.
+The second key is `lib/keys.js` `loadEs256Key()`.
