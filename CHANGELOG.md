@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Cost-split and CO2 estimates, luggage and accessibility filters, trip-safety share links
 - Simulated transit vehicles and a traffic heatmap with a 12-hour time scrubber
 - Groups for shared taxis and transit, live trip status, and an arrivals board
 - Live location for ride partners and moving demo attendees on the map
@@ -24,6 +25,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Tighten every guide, add README badges, correct claims that drifted from the code
