@@ -100,15 +100,22 @@ describe("validateEventConfig", () => {
     assert.match(text, /airports/);
   });
 
-  it("validates the event.config.example.yaml this repo ships", () => {
-    const parsed = parseYaml(
-      readFileSync(new URL("../../event.config.yaml", import.meta.url), "utf8"),
-    );
-    const problems = validateEventConfig(parsed);
-    assert.deepEqual(
-      problems,
-      [],
-      problems.length > 0 ? formatConfigProblems(problems, "event.config.example.yaml") : "",
-    );
+  for (const file of ["event.config.example.yaml", "event.config.demo.yaml"]) {
+    it(`validates the ${file} this repo ships`, () => {
+      const parsed = parseYaml(readFileSync(new URL(`../../${file}`, import.meta.url), "utf8"));
+      const problems = validateEventConfig(parsed);
+      assert.deepEqual(
+        problems,
+        [],
+        problems.length > 0 ? formatConfigProblems(problems, file) : "",
+      );
+    });
+  }
+
+  it("accepts a brand.stylesheet only as a file under /static/", () => {
+    assert.deepEqual(paths(withPatch({ brand: { stylesheet: "/static/theme.css" } })), []);
+    for (const bad of ["https://evil.example/x.css", "/static/../x.css", "/static/x.js"]) {
+      assert.deepEqual(paths(withPatch({ brand: { stylesheet: bad } })), ["brand.stylesheet"], bad);
+    }
   });
 });
