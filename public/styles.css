@@ -1333,3 +1333,24 @@ fieldset legend {
 .sd-claim input {
 	flex: none;
 }
+
+/* ─── OpenID4VCI offer ────────────────────────────────────────────────── */
+.oid4vci-offer {
+	max-width: 460px;
+	margin-inline: auto;
+	text-align: center;
+}
+.oid4vci-offer .qr svg {
+	width: min(100%, 300px);
+	height: auto;
+	border-radius: var(--radius-sm);
+}
+.offer-pin {
+	font-size: 1.1rem;
+	margin-top: 0.75rem;
+}
+.offer-pin strong {
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+	font-size: 1.8rem;
+	letter-spacing: 0.2em;
+}

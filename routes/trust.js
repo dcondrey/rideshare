@@ -170,6 +170,10 @@ get("/trust", async (ctx) => {
                           <summary>Show JWT</summary>
                           <textarea readonly rows="4" class="cred-jwt">${c.jwt}</textarea>
                         </details>
+                        <form method="post" action="/trust/oid4vci/offer" class="inline">
+                          <input type="hidden" name="credential_id" value="${c.id}">
+                          <button type="submit" class="button button-small">Add to a wallet (OpenID4VCI)</button>
+                        </form>
                       </li>`,
                   )}
                 </ul>

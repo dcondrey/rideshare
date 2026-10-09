@@ -196,7 +196,23 @@ payload). Its issuer key no longer exists, so it is for reading, not verifying:
 | Data model | [VC Data Model 2.0](https://www.w3.org/TR/vc-data-model-2.0/) | Followed: v2 context, `validFrom`. App terms resolve through the v2 context's `@vocab` |
 | Securing | VC-JWT, EdDSA ([RFC 8032](https://www.rfc-editor.org/rfc/rfc8032)) | **Deviation:** VC-JWT 1.1 shape, with the credential in a `vc` claim next to `iss`/`sub`/`nbf`/`jti`, while the header says `typ: vc+jwt`, the [VC-JOSE-COSE](https://www.w3.org/TR/vc-jose-cose/) media type, whose payload is the bare credential. A strict VC-JOSE-COSE verifier will see that mismatch; it has to read the `vc` claim to accept these |
 | Signatures | Ed25519, ES256 | Node's built-in `crypto`, verified against RFC 8032 test vectors. ES256 (P-256) signs SD-JWT VCs |
+| Issuance to wallets | [OpenID4VCI 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) | Pre-authorized code flow with a PIN, nonce endpoint, `jwt` proofs (ES256 or Ed25519), format `dc+sd-jwt`. Not implemented: authorization code flow, DPoP, key attestations, deferred issuance, so not HAIP |
 | Selective disclosure | [SD-JWT, RFC 9901](https://www.rfc-editor.org/rfc/rfc9901) + [SD-JWT VC draft-19](https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/) | Followed. Every ride credential is also issued as a `dc+sd-jwt` bound to the holder's `did:key` via `cnf.jwk`; the holder picks claims on `/trust` and signs a KB-JWT with a verifier nonce. Tested against the RFC's own digest vectors. Issuer keys at `/.well-known/jwt-vc-issuer`; `x5c` chains are not supported |
+
+### Issue to a wallet (OpenID4VCI)
+
+Next to each credential on `/trust`, **Add to a wallet** shows a QR code and a
+6-digit PIN: an [OpenID4VCI 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
+credential offer using the pre-authorized code flow. A wallet scans it, trades
+the code and PIN for an access token, fetches a `c_nonce`, proves possession of
+its own key with an `openid4vci-proof+jwt`, and receives the ride credential as
+an SD-JWT VC bound to that key. Metadata lives at
+`/.well-known/openid-credential-issuer` and
+`/.well-known/oauth-authorization-server`. Codes, PINs, tokens and nonces are
+single-use and expire in minutes, and five wrong PINs burn the offer. The flow
+is tested end to end with a scripted wallet; it does not implement HAIP's
+X.509 chains, wallet attestation, DPoP or authorization-code flow, so strict
+HAIP wallets may refuse it.
 
 ### Selective disclosure
 
@@ -211,8 +227,7 @@ next to how many digests stayed hidden (withheld claims and decoys look the
 same). Replaying a presentation fails on the spent nonce.
 
 **Not implemented (yet):** status lists or any revocation, BBS proofs, Data
-Integrity proofs, OpenID4VCI/OpenID4VP issuance and presentation, DIDComm, and
-external wallet integration. Credentials carry no `exp`, and a deployment
+Integrity proofs, OpenID4VP presentation, DIDComm, and HAIP conformance. Credentials carry no `exp`, and a deployment
 publishes a single Ed25519 key, so rotating it makes every earlier VC-JWT
 unverifiable. The
 [TRUST.md](./TRUST.md) roadmap covers counter-signed credentials (the

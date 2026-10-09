@@ -431,6 +431,11 @@ See [`docs/security/ssrf.md`](docs/security/ssrf.md) for details.
 **Threat:** a captured selective-disclosure presentation is replayed to the verifier; a holder adds disclosures the issuer never signed, re-uses one, or rewrites a visible claim through a disclosure; a forger signs with their own key; or an unauthenticated caller floods the nonce table.
 **Mitigation:** `lib/sd-jwt.js` follows RFC 9901 §7: it rejects `alg: none` and any key/alg mismatch, a repeated disclosure or digest, an unreferenced disclosure, and a disclosure that collides with a visible claim or uses a reserved name. Key binding is checked against `cnf.jwk`, with `aud`, a bounded `iat` window and `sd_hash` over the exact presentation. The playground's nonces (`lib/verifier.js`) are single-use, expire after five minutes, and are consumed by one atomic `UPDATE`, so a replay fails; `/trust/verify/nonce` is rate-limited per IP and expired nonces are deleted on each issue. A remote issuer's keys are fetched only through `lib/safe-fetch.js` (see CC-5), and its metadata `issuer` must equal the credential's `iss`. Tests: `tests/unit/sd-jwt.test.js`, `tests/e2e/demo-mode.test.js`.
 
+### CC-13: Stolen or guessed OpenID4VCI offers
+
+**Threat:** someone photographs a credential offer QR code, guesses the PIN, replays a pre-authorized code, access token or proof, or gets a credential bound to their own key for someone else's ride.
+**Mitigation:** the offer only re-issues the attendee's own credential, and the PIN (rendered once in the POST response, never stored in clear) is required at the token endpoint. Five wrong PINs burn the code, and the attempt counter commits even when the request fails. Code, token and nonce are single-use and short-lived, and the token endpoint is rate-limited per IP. Proof JWTs must carry the issuer as `aud`, a fresh `iat` and a live single-use nonce, and their signature must verify with the key they bind. Residual: whoever holds both the QR code and the PIN within ten minutes gets the credential, which is the pre-authorized flow's trust model. Tests: `tests/e2e/oid4vci.test.js`.
+
 ---
 
 ## In-scope vs out-of-scope

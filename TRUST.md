@@ -299,6 +299,20 @@ foreign issuer's key through its `/.well-known/jwt-vc-issuer` metadata.
 Implementation: `lib/jose.js` (JWS, JWK), `lib/sd-jwt.js` (RFC 9901),
 `lib/verifier.js` (nonces, issuer keys), `issueRideSdJwt()` in `lib/trust.js`.
 
+## Issuance to wallets (OpenID4VCI)
+
+`lib/oid4vci.js` and `routes/oid4vci.js` implement OpenID4VCI 1.0's
+pre-authorized code flow. The credential issuer is its own authorization
+server and accepts token requests without a client id.
+
+| Step | Endpoint | Rule |
+|---|---|---|
+| Offer | `POST /trust/oid4vci/offer` (attendee, cookie) | Creates a 10-minute offer for one of the attendee's credentials, shows `openid-credential-offer://?credential_offer_uri=…` as a QR code and a 6-digit PIN rendered once; only hashes of the code and PIN grant access |
+| Offer object | `GET /oid4vci/offer/:id` | Returns `credential_issuer`, `credential_configuration_ids`, and the pre-authorized grant with `tx_code` (numeric, length 6) until redeemed |
+| Token | `POST /oid4vci/token` | Pre-authorized code + PIN → 10-minute Bearer token; the code is single-use, five wrong PINs burn it, rate-limited per IP |
+| Nonce | `POST /oid4vci/nonce` | `c_nonce`, single-use, five minutes |
+| Credential | `POST /oid4vci/credential` | `credential_configuration_id` + `proofs.jwt[1]`; the proof's `typ` must be `openid4vci-proof+jwt`, with exactly one of `jwk`/`kid` (`did:key` only), `aud` = the issuer URL, `iat` within five minutes and a live nonce. Returns `{credentials:[{credential}]}` with an SD-JWT VC bound to the proof key; the token is single-use |
+
 ## Spec versions and interoperability decisions
 
 Verified against primary sources on 2026-10-08. These decide how the
