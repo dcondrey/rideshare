@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Attendee chat room and direct messages with blocking, reports and organizer moderation
 - Opt-in attendee directory and profiles, a More menu, and demo visitors kept apart
 - Cost-split and CO2 estimates, luggage and accessibility filters, trip-safety share links
 - Simulated transit vehicles and a traffic heatmap with a 12-hour time scrubber
@@ -26,6 +27,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
