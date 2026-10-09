@@ -13,6 +13,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Lead the README with the demo and the DID/VC design
 - Update changelog [skip ci]
 - Standardize README header (#14)
@@ -43,6 +44,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Replace static CI badge with live GitHub Actions badge
 
 ### Fixed
+- Move the base-image comment off the FROM line
 - Key map tiles per world copy and anchor pinch zoom on the midpoint
 - Report allowlist file progress without blocking or a modal
 - Bound request/body/email latency and retry transient DB/email failures
