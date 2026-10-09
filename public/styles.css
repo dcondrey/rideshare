@@ -1704,7 +1704,7 @@ fieldset legend {
 	.shell-fab {
 		bottom: calc(76px + env(safe-area-inset-bottom));
 	}
-	.is-shell .tm-zoom {
+	.is-shell .tm-controls {
 		bottom: calc(140px + env(safe-area-inset-bottom));
 	}
 	.panel {
@@ -1746,5 +1746,46 @@ fieldset legend {
 				opacity: 0;
 			}
 		}
+	}
+}
+.dot-people {
+	background: #f59e0b;
+}
+.shell-share {
+	position: absolute;
+	left: 50%;
+	transform: translateX(-50%);
+	bottom: max(28px, env(safe-area-inset-bottom));
+	z-index: 600;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.7rem 1.1rem;
+	border-radius: 999px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+.share-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--text-muted);
+}
+.shell-share[aria-pressed="true"] .share-dot {
+	background: #2563eb;
+	box-shadow: 0 0 0 4px rgb(37 99 235 / 0.25);
+}
+@media (max-width: 720px) {
+	.shell-share {
+		left: 12px;
+		transform: none;
+		bottom: calc(76px + env(safe-area-inset-bottom));
+		padding: 0.6rem 0.9rem;
+		font-size: 0.85rem;
 	}
 }

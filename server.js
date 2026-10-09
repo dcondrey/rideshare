@@ -29,6 +29,7 @@ import "./routes/demo.js";
 import "./routes/oid4vci.js";
 import "./routes/oid4vp.js";
 import "./routes/didcomm.js";
+import "./routes/live.js";
 
 // Seed the attendee allowlist from ./allowlist.csv (only if table is empty).
 import { seedAllowlistIfEmpty } from "./lib/allowlist.js";

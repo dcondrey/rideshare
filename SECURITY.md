@@ -108,7 +108,7 @@ Cross-site request forgery against the state-changing POST endpoints
 - `SameSite=Lax` session cookie blocks cross-origin POSTs initiated by
   third-party sites in modern browsers.
 - `Content-Security-Policy: frame-ancestors 'none'` blocks framing.
-- `Permissions-Policy` denies geolocation/camera/microphone.
+- `Permissions-Policy` denies camera, microphone and other powerful features. Geolocation and screen wake lock are allowed for this origin only, for opt-in live location.
 
 **Limit:** SameSite=Lax is the primary defence. Browsers ≥10 years old
 that don't enforce SameSite are vulnerable to classic CSRF. Acceptable

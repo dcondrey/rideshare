@@ -52,6 +52,7 @@ The system stores or handles the following assets. Each is rated by sensitivity 
 | A7 | Magic-link tokens (in flight) | High during their 10-min window | `data/app.db` table `magic_links`, then deleted on use | n/a — short-lived |
 | A8 | Session IDs | High during session lifetime | `data/app.db` table `sessions`, opaque random | Yes — revocable by deleting row |
 | A9 | Issued Verifiable Credentials (JWS) | Public-by-design but cryptographically bound | Wherever the holder stores them | n/a — public artifacts |
+| A10 | Live location (opt-in sharing) | High while shared | Server memory only: latest point per user, 2-minute expiry | Partly: it goes stale fast, but a past position can reveal a hotel |
 
 **Note on A1:** the allowlist is stored as `HMAC(server_secret, lower(email))`, not as plaintext. This means a host-read disclosure (insider with DB access) does not directly reveal who is invited — though a dictionary of likely emails can still be checked. See [Asset A1, Information disclosure](#a1-id).
 
@@ -338,6 +339,21 @@ An append-only record of privileged actions, intended to enable post-event foren
 #### A6, EoP
 
 - N/A.
+
+### Asset A10: live location
+
+Shared only after the user taps "Share my location" on the map, and only while that page is open. Code: `lib/live.js`, `routes/live.js`.
+
+- **T-A10-I1**: Someone who isn't your ride partner watches you move.
+  *Mitigation:* each position event is sent only to the sharer and people on a non-cancelled ride with them through an accepted claim. The check runs per event, not once at subscribe time, so a cancelled match stops delivery within the 10-second partner cache. Covered by `tests/e2e/live.test.js`.
+- **T-A10-I2**: Location history leaks from storage, backups or logs.
+  *Mitigation:* nothing is written to disk. The server keeps the latest point per user in memory and drops it after 2 minutes without an update, on "stop", or on restart.
+- **T-A10-D1**: A client floods position updates.
+  *Mitigation:* 40 updates a minute per user, coordinates and accuracy range-checked; the browser sends at most one every 4 seconds.
+- **T-A10-S1**: Fake demo attendees mistaken for real people.
+  *Mitigation:* synthetic movement exists only in `DEMO_MODE`, is computed from the clock, and is marked `synthetic` and drawn grey.
+
+Browsers stop geolocation when the tab is closed or backgrounded, so there is no background tracking. The page holds a Screen Wake Lock while sharing to keep the screen on. `Permissions-Policy` allows `geolocation` and `screen-wake-lock` for this origin only.
 
 ---
 

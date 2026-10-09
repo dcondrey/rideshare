@@ -61,6 +61,7 @@ export async function startTestServer(envOverrides = {}) {
   await import("../../routes/oid4vci.js");
   await import("../../routes/oid4vp.js");
   await import("../../routes/didcomm.js");
+  await import("../../routes/live.js");
   await import("../../lib/config.js");
   await (await import("../../lib/trust.js")).getDeploymentKey();
 

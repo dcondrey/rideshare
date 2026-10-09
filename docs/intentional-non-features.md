@@ -15,7 +15,7 @@ A non-feature is not a TODO. These are decisions, not gaps. Reopening any of the
 - Push notifications, which require a third-party service that observes user activity.
 - A signing-key management story for app distribution that is non-trivial.
 
-**The web page gives us:** it works on any phone browser with nothing to install, it can be added to a home screen, and every update ships on the next page load. There is no service worker or offline cache, and the app never asks for location (`Permissions-Policy: geolocation=()`). Sufficient for an event.
+**The web page gives us:** it works on any phone browser with nothing to install, it can be added to a home screen, and every update ships on the next page load. There is no service worker or offline cache. The browser asks for location only when you tap "Share my location" on the map. Sufficient for an event.
 
 ---
 
@@ -145,15 +145,9 @@ See "No background checks" and "No user-uploaded media." Same reasoning, doubled
 
 ---
 
-## No real-time location sharing during a ride
+## No location history or background tracking
 
-**Why not:**
-
-- Live-location streaming requires WebSockets or long-poll: more attack surface.
-- Storing or even briefly buffering live location creates a high-value target.
-- Existing tools (Signal, Find My, Google Maps share-trip) do this well already.
-
-We facilitate the meeting. After that, attendees use whatever they already use.
+Live location exists, but narrowly: you opt in on the map, only your matched ride partners see it, and the server keeps your latest point in memory for two minutes. No trail is stored. Web pages can't track location in the background, and we wouldn't if they could. Once you've met, use Signal, Find My or Google Maps if you want more.
 
 ---
 

@@ -206,3 +206,175 @@
   const initialPath = initial ? panelPath(initial) : null;
   if (initialPath) open(initialPath, { push: false });
 })();
+
+// ── Live layer: people on the move (lib/live.js) ────────────────────────────
+// Ride partners' shared positions and, in the live demo, synthetic attendees.
+// Markers glide between updates; with reduced motion they jump.
+(() => {
+  if (!window.EventSource || !document.getElementById("map")) return;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const live = new Map(); // key → { node, from, to, start }
+  const GLIDE_MS = 1800;
+  let peopleVisible = true;
+
+  const esc = (s) =>
+    String(s).replace(
+      /[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+    );
+
+  function upsert(key, lat, lng, spec) {
+    const api = window.RideshareMap;
+    if (!api) return;
+    let m = live.get(key);
+    if (!m) {
+      const node = api.map.addMarker({ lat, lng, ...spec, liveKey: key });
+      if (!peopleVisible) node.hidden = true;
+      m = { node, from: { lat, lng }, to: { lat, lng }, start: 0 };
+      live.set(key, m);
+      return;
+    }
+    const cur = m.node.isConnected ? currentPos(m, performance.now()) : m.to;
+    m.from = cur;
+    m.to = { lat, lng };
+    m.start = performance.now();
+    if (reduce) api.map.moveMarker(m.node, lat, lng);
+  }
+
+  function remove(key) {
+    const m = live.get(key);
+    if (!m) return;
+    window.RideshareMap?.map.clearMarkers((d) => d.liveKey === key);
+    live.delete(key);
+  }
+
+  function currentPos(m, now) {
+    const t = Math.min(1, (now - m.start) / GLIDE_MS);
+    return {
+      lat: m.from.lat + (m.to.lat - m.from.lat) * t,
+      lng: m.from.lng + (m.to.lng - m.from.lng) * t,
+    };
+  }
+
+  function frame(now) {
+    if (!reduce && window.RideshareMap) {
+      for (const m of live.values()) {
+        if (now - m.start <= GLIDE_MS + 50) {
+          const p = currentPos(m, now);
+          window.RideshareMap.map.moveMarker(m.node, p.lat, p.lng);
+        }
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  const es = new EventSource("/live/stream");
+  es.addEventListener("ghosts", (e) => {
+    const list = JSON.parse(e.data);
+    const seen = new Set();
+    for (const g of list) {
+      const key = `g${g.id}`;
+      seen.add(key);
+      upsert(key, g.lat, g.lng, {
+        color: "#64748b",
+        size: 18,
+        layer: "people",
+        zIndex: 300,
+        ariaLabel: `Synthetic attendee ${g.name}`,
+        html: `<strong>${esc(g.name)}</strong><br><em>Synthetic demo attendee on a simulated trip</em>`,
+      });
+    }
+    for (const key of [...live.keys()]) if (key.startsWith("g") && !seen.has(key)) remove(key);
+  });
+  es.addEventListener("position", (e) => {
+    const p = JSON.parse(e.data);
+    const key = `u${p.userId}`;
+    if (p.gone) return remove(key);
+    upsert(key, p.lat, p.lng, {
+      color: p.self ? "#2563eb" : "#f59e0b",
+      label: p.self ? "•" : (p.name || "?").slice(0, 1).toUpperCase(),
+      size: p.self ? 24 : 28,
+      layer: "people",
+      zIndex: 900,
+      ariaLabel: p.self ? "You" : `Ride partner ${p.name}`,
+      html: p.self
+        ? "<strong>You</strong><br><em>Visible to your ride partners only</em>"
+        : `<strong>${esc(p.name)}</strong><br><em>Your ride partner, sharing live</em>`,
+    });
+  });
+
+  // The People chip covers both partners and synthetic attendees.
+  const chip = document.querySelector('.shell-filters [data-layer="people"]');
+  chip?.addEventListener("click", () => {
+    peopleVisible = chip.getAttribute("aria-pressed") === "true";
+    for (const m of live.values()) m.node.hidden = !peopleVisible;
+  });
+
+  // ── Sharing my position ──
+  const btn = document.querySelector(".shell-share");
+  if (!btn || !navigator.geolocation) {
+    if (btn) btn.hidden = true;
+    return;
+  }
+  const label = btn.querySelector(".share-label");
+  let watch = null;
+  let lock = null;
+  let lastSent = 0;
+
+  const keepAwake = () =>
+    navigator.wakeLock
+      ?.request("screen")
+      .then((l) => {
+        lock = l;
+      })
+      .catch(() => {});
+
+  function post(path, body) {
+    return fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : "{}",
+    });
+  }
+
+  function start() {
+    watch = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - lastSent < 4000) return;
+        lastSent = now;
+        post("/live/position", {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+      },
+      (err) => {
+        stop();
+        label.textContent = err.code === 1 ? "Location blocked" : "Location unavailable";
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    );
+    btn.setAttribute("aria-pressed", "true");
+    label.textContent = "Sharing with ride partners";
+    keepAwake();
+  }
+
+  function stop() {
+    if (watch !== null) navigator.geolocation.clearWatch(watch);
+    watch = null;
+    lock?.release().catch(() => {});
+    lock = null;
+    btn.setAttribute("aria-pressed", "false");
+    label.textContent = "Share my location";
+    post("/live/stop");
+  }
+
+  btn.addEventListener("click", () => (watch === null ? start() : stop()));
+  // The wake lock drops whenever the tab is hidden; take it back on return.
+  document.addEventListener("visibilitychange", () => {
+    if (watch !== null && document.visibilityState === "visible") keepAwake();
+  });
+})();

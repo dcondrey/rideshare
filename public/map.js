@@ -256,10 +256,25 @@
     return node;
   };
 
-  TinyMap.prototype.clearMarkers = function () {
+  /** Remove markers, all of them or those whose data matches `keep === false`. */
+  TinyMap.prototype.clearMarkers = function (shouldRemove) {
     this._closePopup();
-    for (const mk of this.markers) mk.node.remove();
-    this.markers = [];
+    const kept = [];
+    for (const mk of this.markers) {
+      if (!shouldRemove || shouldRemove(mk.data)) mk.node.remove();
+      else kept.push(mk);
+    }
+    this.markers = kept;
+  };
+
+  /** Move one marker (live layers); cheap enough to call every frame. */
+  TinyMap.prototype.moveMarker = function (node, lat, lng) {
+    const mk = this.markers.find((x) => x.node === node);
+    if (!mk) return;
+    mk.data.lat = lat;
+    mk.data.lng = lng;
+    this._positionMarker(node, mk.data);
+    if (this.openPopup && this.openPopup.anchor === node) this._positionPopup(this.openPopup);
   };
 
   /** Show or hide every marker tagged with `layer`. */
@@ -604,8 +619,10 @@
       zoom: data.zoom,
     });
 
+    const STATIC = new Set(["venue", "meetup", "offer", "request"]);
     function draw(data) {
-      map.clearMarkers();
+      // Live layers (people on the move) are owned by public/shell.js.
+      map.clearMarkers((d) => STATIC.has(d.layer));
       const brand = data.brandColor || "#4f46e5";
 
       if (data.venue) {

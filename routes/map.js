@@ -128,6 +128,7 @@ export function renderShell(ctx) {
             <button type="button" class="chip" data-layer="offer" aria-pressed="true"><span class="dot dot-offer"></span>Offers</button>
             <button type="button" class="chip" data-layer="request" aria-pressed="true"><span class="dot dot-request"></span>Requests</button>
             <button type="button" class="chip" data-layer="meetup" aria-pressed="true"><span class="dot dot-meetup"></span>Meetups</button>
+            <button type="button" class="chip" data-layer="people" aria-pressed="true"><span class="dot dot-people"></span>People</button>
           </div>
           ${config.demoMode ? html`<a href="/demo" class="shell-live"><span class="live-dot"></span>Live demo · tour</a>` : ""}
         </header>
@@ -145,6 +146,9 @@ export function renderShell(ctx) {
         </nav>
 
         <a href="/rides/new" class="shell-fab"><span aria-hidden="true">+</span> Post a ride</a>
+        <button type="button" class="shell-share" aria-pressed="false" title="Only your matched ride partners can see it">
+          <span class="share-dot" aria-hidden="true"></span><span class="share-label">Share my location</span>
+        </button>
 
         <aside id="panel" class="panel" hidden role="dialog" aria-modal="false" aria-labelledby="panel-title">
           <div class="panel-head">
