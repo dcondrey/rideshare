@@ -54,6 +54,15 @@ describe("DIDComm agent", () => {
     assert.equal(response.peer, doc.id);
   });
 
+  it("matches Discover Features wildcards without regular expressions", () => {
+    const ping = "https://didcomm.org/trust-ping/2.0";
+    assert.equal(dc.wildcardMatch("https://didcomm.org/*", ping), true);
+    assert.equal(dc.wildcardMatch("*trust-ping*", ping), true);
+    assert.equal(dc.wildcardMatch(ping, ping), true);
+    assert.equal(dc.wildcardMatch("https://didcomm.org/*/1.0", ping), false);
+    assert.equal(dc.wildcardMatch("*a*a*a*a*a*a*a*a*b", "a".repeat(40)), false);
+  });
+
   it("discloses the protocols it supports", async () => {
     const id = await dc.sendQuery(doc.id);
     await settle();

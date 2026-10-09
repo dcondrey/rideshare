@@ -58,7 +58,16 @@
     const tick = () =>
       fetch(`/oid4vp/status/${encodeURIComponent(id)}`)
         .then((r) => r.json())
-        .then((s) => (s.status === "pending" ? setTimeout(tick, 2000) : show(s)))
+        .then((s) => {
+          if (s.status !== "pending") return show(s);
+          if (s.errors?.length) {
+            const p = document.createElement("p");
+            p.className = "muted small";
+            p.textContent = `A response did not verify (${s.errors.join("; ")}). Still waiting for a valid one…`;
+            pending.replaceChildren(p);
+          }
+          setTimeout(tick, 2000);
+        })
         .catch(() => setTimeout(tick, 4000));
     setTimeout(tick, 2000);
   }

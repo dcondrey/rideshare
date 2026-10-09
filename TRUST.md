@@ -328,8 +328,8 @@ verifier.
 |---|---|---|
 | Request | `POST /verify/request` | 10-minute request with fresh `state` and `nonce`; QR of `openid4vp://?client_id=decentralized_identifier:<did>&request_uri=…` |
 | Request object | `GET /oid4vp/request/:id` | `application/oauth-authz-req+jwt`, header `typ: oauth-authz-req+jwt`, `alg: ES256`, `kid: <did>#key-2`; payload `client_id`, `response_type: vp_token`, `response_mode: direct_post`, `response_uri`, `nonce`, `state`, `dcql_query`, `client_metadata.vp_formats_supported`; gone once answered or expired |
-| Response | `POST /oid4vp/response` | `vp_token` must map the DCQL credential id to one SD-JWT VC presentation; KB-JWT `aud` = the full prefixed client id, `nonce` = the request's; `vct` must be this deployment's; settles once |
-| Status | `GET /oid4vp/status/:id` | The request id is the capability; returns the verified claims |
+| Response | `POST /oid4vp/response` | `vp_token` must map the DCQL credential id to one SD-JWT VC presentation; KB-JWT `aud` = the full prefixed client id, `nonce` = the request's; `vct` must be this deployment's; settles once, on success only, so junk posted with a leaked `state` cannot void the request |
+| Status | `GET /oid4vp/status/:token` | A separate random token rendered only on the verifier page (the request id in the QR does not unlock it); returns the verified claims, or the latest failed attempt while still pending |
 | In-app holder | `POST /trust/oid4vp/inspect` | Fetches a request (locally, or via `safe-fetch`), checks `typ`, that `kid` belongs to the client id's DID, and the signature against that DID's `assertionMethod` key; the browser then signs and posts only the requested claims |
 
 ## DIDComm between deployments

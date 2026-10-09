@@ -68,7 +68,7 @@ post("/verify/request", async (ctx) => {
           <div class="qr">${raw(qrSvg(r.walletUrl, { label: "Presentation request QR code" }))}</div>
           <p><a class="button" href="${r.walletUrl}">Open in a wallet on this device</a></p>
           <p><a class="button" href="/trust?request=${encodeURIComponent(r.walletUrl)}#answer-request">Answer with this browser's credential</a></p>
-          <div class="oid4vp-status" data-oid4vp-status="${r.id}" aria-live="polite">
+          <div class="oid4vp-status" data-oid4vp-status="${r.statusToken}" aria-live="polite">
             <p class="muted">Waiting… the request expires at ${new Date(r.expiresAt).toISOString().slice(11, 16)} UTC.</p>
           </div>
         </section>

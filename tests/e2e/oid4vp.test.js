@@ -84,7 +84,7 @@ describe("OpenID4VP verifier", () => {
     });
     const res = await post({ vp_token: JSON.stringify({ [q.id]: [pres] }), state: p.state });
     assert.equal(res.status, 200);
-    const s = await (await srv.fetch(`/oid4vp/status/${req.id}`)).json();
+    const s = await (await srv.fetch(`/oid4vp/status/${req.statusToken}`)).json();
     assert.equal(s.status, "verified", JSON.stringify(s.errors));
     assert.equal(s.claims.role, "rider");
     assert.equal(s.claims.event.name, "IDW");
@@ -98,9 +98,14 @@ describe("OpenID4VP verifier", () => {
       404,
       "answered request is gone",
     );
+    assert.equal(
+      (await srv.fetch(`/oid4vp/status/${req.id}`)).status,
+      404,
+      "the id in the QR does not unlock the result",
+    );
   });
 
-  it("fails a presentation bound to another verifier", async () => {
+  it("rejects a presentation bound to another verifier and stays pending", async () => {
     const req = lib.createPresentationRequest();
     const p = await walletOpens(req.walletUrl);
     const pres = lib.presentSdJwt(credential, () => true, {
@@ -112,9 +117,18 @@ describe("OpenID4VP verifier", () => {
       vp_token: JSON.stringify({ [p.dcql_query.credentials[0].id]: [pres] }),
       state: p.state,
     });
-    const s = await (await srv.fetch(`/oid4vp/status/${req.id}`)).json();
-    assert.equal(s.status, "failed");
+    const s = await (await srv.fetch(`/oid4vp/status/${req.statusToken}`)).json();
+    assert.equal(
+      s.status,
+      "pending",
+      "a bad response must not void the request for the real wallet",
+    );
     assert.match(s.errors.join(" "), /aud mismatch/);
+    await post({ vp_token: "junk", state: p.state });
+    assert.equal(
+      (await (await srv.fetch(`/oid4vp/status/${req.statusToken}`)).json()).status,
+      "pending",
+    );
   });
 
   it("lets the in-app holder inspect a request, signature checked", async () => {
