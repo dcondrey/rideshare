@@ -1,19 +1,10 @@
 # Threat Model
 
-> Full STRIDE-style threat enumeration for the **rideshare** event ride-sharing webapp. Audience: security engineers, penetration testers, and operators evaluating whether to deploy this codebase at a high-stakes event.
+> STRIDE threat model for **rideshare**, an event ride-sharing webapp. For security engineers, pentesters, and operators deciding whether to run it at a high-stakes event. Disclosure process and one-page summary: [`SECURITY.md`](SECURITY.md).
 
-This document is the long-form companion to [`SECURITY.md`](SECURITY.md). The security policy contains the disclosure process and a one-page summary; this document enumerates assets, trust boundaries, actors, threats, and mitigations.
+Threat IDs encode asset and STRIDE category: T-A1-I1 is A1, **I**nformation disclosure (**S**poofing, **T**ampering, **R**epudiation, **D**enial of service, **E**levation of privilege).
 
-The model uses the STRIDE taxonomy:
-
-- **S**poofing — pretending to be someone you are not.
-- **T**ampering — modifying data without authorization.
-- **R**epudiation — performing an action and denying it later.
-- **I**nformation disclosure — reading data without authorization.
-- **D**enial of service — preventing legitimate users from getting service.
-- **E**levation of privilege — gaining capabilities you should not have.
-
-A threat that is acknowledged but unmitigated is listed as a **residual risk** at the end of this document, not silently swept under "out of scope."
+Known unmitigated threats are [Residual risks](#residual-risks), not out of scope.
 
 ---
 
@@ -23,44 +14,42 @@ A threat that is acknowledged but unmitigated is listed as a **residual risk** a
 2. [Trust boundaries](#trust-boundaries)
 3. [Actors](#actors)
 4. [Per-asset threat enumeration](#per-asset-threat-enumeration)
-   1. [Attendee email list](#asset-attendee-email-list)
-   2. [Attendee contact info (Signal/phone)](#asset-attendee-contact-info)
-   3. [Ride metadata](#asset-ride-metadata)
-   4. [Deployment signing key](#asset-deployment-signing-key)
-   5. [User signing keys](#asset-user-signing-keys)
-   6. [Audit log](#asset-audit-log)
+   1. [Attendee email list](#asset-a1-attendee-email-list-allowlist)
+   2. [Attendee contact info (Signal/phone)](#asset-a2-attendee-out-of-band-contact)
+   3. [Ride metadata](#asset-a3-ride-metadata)
+   4. [Deployment signing key](#asset-a4-deployment-ed25519-signing-key)
+   5. [User signing keys](#asset-a5-user-signing-keys-didkey)
+   6. [Audit log](#asset-a6-audit-log)
+   7. [Live location](#asset-a10-live-location)
 5. [Cross-cutting threats](#cross-cutting-threats)
 6. [In-scope vs out-of-scope](#in-scope-vs-out-of-scope)
 7. [Residual risks](#residual-risks)
 8. [Assumptions](#assumptions)
-9. [Change log](#change-log)
+9. [Where to read more](#where-to-read-more)
+10. [Change log](#change-log)
 
 ---
 
 ## Assets
 
-The system stores or handles the following assets. Each is rated by sensitivity and whether disclosure is recoverable.
-
 | # | Asset | Sensitivity | Where it lives | Recoverable on disclosure? |
 | --- | --- | --- | --- | --- |
-| A1 | Attendee email list (the allowlist) | High | `data/app.db` table `allowlist_hashes`, hashed | No — emails are durable identifiers |
-| A2 | Attendee out-of-band contact (Signal handle, phone, Matrix ID) | High | `data/app.db` table `users`, plaintext | No |
-| A3 | Ride metadata (origin, destination, time, pairings, notes) | Medium-High | `data/app.db` table `rides` | No — locations reveal home/hotel |
-| A4 | Deployment Ed25519 signing key | Critical | `secrets/deployment.key` (file mode 0600) on the host | No — rotation invalidates issued credentials |
-| A5 | User Ed25519 signing keys (`did:key`) | Critical to the user | Browser `IndexedDB`, never sent to the server | n/a — server never sees them |
-| A6 | Audit log | High | `data/app.db` table `audit_log` | No — integrity loss is permanent |
-| A7 | Magic-link tokens (in flight) | High during their 10-min window | `data/app.db` table `magic_links`, then deleted on use | n/a — short-lived |
-| A8 | Session IDs | High during session lifetime | `data/app.db` table `sessions`, opaque random | Yes — revocable by deleting row |
-| A9 | Issued Verifiable Credentials (JWS) | Public-by-design but cryptographically bound | Wherever the holder stores them | n/a — public artifacts |
-| A10 | Live location (opt-in sharing) | High while shared | Server memory only: latest point per user, 2-minute expiry | Partly: it goes stale fast, but a past position can reveal a hotel |
+| A1 | Attendee email list (the allowlist) | High | `data/app.db` table `allowlist_hashes`, hashed | No: emails are durable identifiers |
+| A2 | Out-of-band contact (Signal, phone, Matrix ID) | High | `data/app.db` table `users`, plaintext | No |
+| A3 | Ride metadata (route, time, pairings, notes) | Medium-High | `data/app.db` table `rides` | No: locations reveal home/hotel |
+| A4 | Deployment Ed25519 signing key | Critical | `secrets/deployment.key` (mode 0600) on the host | No: rotation invalidates issued credentials |
+| A5 | User Ed25519 signing keys (`did:key`) | Critical to the user | Browser `IndexedDB`, never sent to the server | n/a: server never sees them |
+| A6 | Audit log | High | `data/app.db` table `audit_log` | No: integrity loss is permanent |
+| A7 | Magic-link tokens (in flight) | High for 15 min | `data/app.db` table `magic_links`, deleted on use | n/a: short-lived |
+| A8 | Session IDs | High while valid | `data/app.db` table `sessions`, opaque random | Yes: delete the row |
+| A9 | Issued Verifiable Credentials (JWS) | Public, cryptographically bound | With the holder | n/a: public |
+| A10 | Live location (opt-in sharing) | High while shared | Server memory only: latest point per user, 2-minute expiry | Partly: stale fast, but a past position can reveal a hotel |
 
-**Note on A1:** the allowlist is stored as `HMAC(server_secret, lower(email))`, not as plaintext. This means a host-read disclosure (insider with DB access) does not directly reveal who is invited — though a dictionary of likely emails can still be checked. See [Asset A1, Information disclosure](#a1-id).
+A1 rows are `HMAC(server_secret, lower(email))`. A DB insider can test guessed emails but not read the list (T-A1-I2; see also [T-A1-I1](#a1-id)).
 
 ---
 
 ## Trust boundaries
-
-A trust boundary is a place where data crosses between zones with different privilege or trust assumptions. We enumerate them so each boundary has an explicit policy.
 
 ```
 +--------------+  TLS  +---------+   IPC   +-----------+
@@ -75,472 +64,300 @@ A trust boundary is a place where data crosses between zones with different priv
                                                         (OSM, Stadia, etc.)
 ```
 
-| # | Boundary | Direction | Policy summary |
+| # | Boundary | Direction | Policy |
 | --- | --- | --- | --- |
-| B1 | Browser ↔ server | bidirectional | TLS terminated at the edge; HSTS preloaded; CSP enforced; strict input validation server-side |
-| B2 | Server ↔ SQLite | bidirectional | Same-process IPC via `node:sqlite`; trusted; queries are parameterised everywhere |
-| B3 | Server ↔ email provider | server → provider | Outbound only; provider holds delivery secrets; we send tokenised links, never store provider responses with PII beyond a delivery ID |
-| B4 | Server ↔ tile provider | server → provider | Optional; only invoked if the deployment chooses a remote tile style; no per-user attribution sent |
-| B5 | Server ↔ peer deployment (cross-event verification) | bidirectional via `did:web` resolution | Hardened HTTP fetch; allowlisted IP ranges; size-capped body; redirects refused; see [`docs/security/ssrf.md`](docs/security/ssrf.md) |
-| B6 | Operator ↔ host | shell access | Out of scope of this codebase — the operator is trusted with full root |
-| B7 | Admin ↔ admin endpoints | inside B1 | Admin role is gated by env-listed admin emails; no privilege escalation route from attendee → admin |
+| B1 | Browser ↔ server | bidirectional | TLS at the edge; HSTS preloaded; CSP; strict server-side input validation |
+| B2 | Server ↔ SQLite | bidirectional | Same-process via `node:sqlite`; trusted; all queries parameterised |
+| B3 | Server ↔ email provider | server → provider | Outbound only; provider holds delivery secrets; we send tokenised links and keep only a delivery ID |
+| B4 | Server ↔ tile provider | server → provider | Optional, remote tile styles only; no per-user attribution sent |
+| B5 | Server ↔ peer deployment (cross-event verification) | bidirectional via `did:web` resolution | Allowlisted IP ranges, size-capped body, no redirects. See [`docs/security/ssrf.md`](docs/security/ssrf.md) |
+| B6 | Operator ↔ host | shell access | Out of scope; operator has trusted root |
+| B7 | Admin ↔ admin endpoints | inside B1 | Admin role from env-listed emails; no attendee → admin path |
 
 ---
 
 ## Actors
 
-| Code | Actor | Capabilities | Modeled? |
-| --- | --- | --- | --- |
-| U-anon | Unauthenticated visitor | View public pages (event landing, sign-in form, `/trust` if public) | yes |
-| U-attendee | Signed-in attendee | Post a ride, claim a seat, view their own profile, cancel their own ride | yes |
-| U-admin | Event admin (env-listed) | Manage allowlist, view aggregate insights, view audit log, wipe event | yes |
-| A-ext | External attacker, unauthenticated | Network access to the server | yes |
-| A-acct | Compromised attendee account | Stolen magic link or session cookie | yes |
-| A-admin | Compromised admin account | Same as A-acct but with admin role | yes |
-| A-host | Compromised host | Root on the box | acknowledged, NOT modeled |
-| I-db | Insider with read-only DB access | Can `sqlite3` the file, no app-level privileges | yes |
-| A-peer | Malicious or compromised peer deployment | Operates a `did:web` endpoint we trust to issue cross-event credentials | yes |
-| A-tile | Malicious tile provider | Returns crafted PNG/MVT bytes | yes (low likelihood, low impact — see B4) |
-| A-email | Malicious email provider / passive observer of email | Reads outbound mail (e.g., on a misconfigured corporate gateway) | yes |
+All actors are modeled except A-host (acknowledged, not modeled). A-tile: low likelihood and impact (B4).
+
+| Code | Actor | Capabilities |
+| --- | --- | --- |
+| U-anon | Unauthenticated visitor | Public pages (landing, sign-in, `/trust` if public) |
+| U-attendee | Signed-in attendee | Post a ride, claim a seat, view own profile, cancel own ride |
+| U-admin | Event admin (env-listed) | Manage allowlist, view insights and audit log, wipe event |
+| A-ext | External attacker, unauthenticated | Network access |
+| A-acct | Compromised attendee account | Stolen magic link or session cookie |
+| A-admin | Compromised admin account | A-acct plus admin role |
+| A-host | Compromised host | Root |
+| I-db | Insider with read-only DB access | Can `sqlite3` the file; no app privileges |
+| A-peer | Malicious or compromised peer deployment | Runs a `did:web` endpoint we trust for cross-event credentials |
+| A-tile | Malicious tile provider | Returns crafted PNG/MVT bytes |
+| A-email | Malicious email provider / passive observer | Reads outbound mail (e.g., misconfigured corporate gateway) |
 
 ---
 
 ## Per-asset threat enumeration
 
-### Asset A1 — attendee email list (allowlist)
+### Asset A1: attendee email list (allowlist)
 
-The allowlist is the set of email addresses approved to sign in for this event. It is the **first** trust decision the system makes.
+Who may sign in. Enumeration (I1) is the likeliest attack.
 
-#### A1, Spoofing
+- **T-A1-S1**: Sign-in with a victim's email to grab the link via a side channel.
+  *Mitigation:* link goes only to the email on file, never echoed; one response for listed, unlisted, and rate limited.
+- **T-A1-S2**: Spoofed `From:` on a confirmation email to phish the victim.
+  *Mitigation:* SPF/DKIM/DMARC on the sending domain (operator, [`RUNBOOK.md`](RUNBOOK.md#first-time-setup-checklist)).
+- **T-A1-T1**: Attacker adds themselves via the admin endpoint.
+  *Mitigation:* admin session required; role comes from `ADMIN_EMAILS` env, not a DB row. Mutations audited.
+- **T-A1-T2**: Victim's HMAC swapped so the attacker gets their links.
+  *Mitigation:* HMAC is keyed with a server-only secret and recomputed from the submitted email; no forged row matches without it.
+- **T-A1-R1**: Admin removes an attendee, then denies it.
+  *Mitigation:* each mutation writes an `audit` row with actor session ID and content hash. Chaining planned ([`docs/security/audit-tampering.md`](docs/security/audit-tampering.md)).
+- <a id="a1-id"></a>**T-A1-I1**: Probe likely emails via response shape, timing, or delivery.
+  *Mitigation:* same body ("If you are on the list, a link is on the way.") and status (`200`) for all. `POST /auth/send` redirects before the lookup runs, and the off-list path adds a 50-150 ms delay ([`docs/security/timing-attacks.md`](docs/security/timing-attacks.md)). Rate limits: 30 / hour per IP, `MAGIC_LINK_RATE_LIMIT` (default 5) / hour per email.
+- **T-A1-I2**: DB-read insider checks for known targets.
+  *Mitigation:* rows are `HMAC(server_secret, email)`: needs candidate emails (offline dictionary), can't bulk-export.
+- **T-A1-I3**: Allowlist read from a leaked backup.
+  *Mitigation:* same HMAC protection. Backups MUST be encrypted at rest (operator, [`RUNBOOK.md`](RUNBOOK.md#backup-procedure)).
+- **T-A1-D1**: Garbage HMACs flood the allowlist.
+  *Mitigation:* admin-only, rate-limited, bounded by event size (typical ≤2,000 rows).
+- **T-A1-E1**: Attendee adds themselves to `ADMIN_EMAILS`.
+  *Mitigation:* read from process env at startup; no request path writes it.
 
-- **T-A1-S1**: An attacker submits a sign-in request with a victim's email, hoping to receive the magic link via a side channel.
-  *Mitigation:* the magic link is sent only to the email on file, never echoed in the response. Response shape is identical for "in allowlist", "not in allowlist", and "rate limited".
-- **T-A1-S2**: An attacker spoofs the `From:` of a confirmation email to phish the victim into clicking a fake link.
-  *Mitigation:* SPF/DKIM/DMARC are required on the sending domain (operator's responsibility — documented in [`RUNBOOK.md`](RUNBOOK.md#first-time-setup-checklist)).
+### Asset A2: attendee out-of-band contact
 
-#### A1, Tampering
+Free-text profile fields the attendee edits.
 
-- **T-A1-T1**: Attacker adds themselves to the allowlist by manipulating the admin endpoint.
-  *Mitigation:* admin endpoints require admin session; admin role is set from the `ADMIN_EMAILS` env var, not from any DB row that an attendee can write. Allowlist mutations are recorded in the audit log.
-- **T-A1-T2**: Attacker swaps the HMAC of a victim's email for their own to receive the victim's magic links.
-  *Mitigation:* HMAC is computed at insert time using a server-only secret; the input email itself is what we hash on each sign-in attempt; an attacker cannot construct an HMAC of their own email that matches a row keyed to the victim's email without the server secret.
+- **T-A2-S1**: Impersonating an attendee in a chat.
+  *Mitigation:* contact is shown with the `did:key` and any presented credentials; UI says trust the identifier, not the name. Free-text collisions are unsolved.
+- **T-A2-T1**: Editing another attendee's contact info.
+  *Mitigation:* actor from the session, never the body. Ownership checks in `lib/rides.js`, exercised by `tests/unit/ride-capacity.test.js` and `tests/e2e/full-flow.test.js`.
+- **T-A2-R1**: Attendee deletes their contact info, blames someone else.
+  *Mitigation:* profile mutations audited.
+- **T-A2-I1**: Public list of attendee contacts.
+  *Mitigation:* shown only to signed-in attendees in the same ride or meetup.
+- **T-A2-I2**: SQL injection.
+  *Mitigation:* all queries parameterised (`db.prepare(...).run(...)`); review checklist forbids concatenated SQL.
+- **T-A2-I3**: Scraping via search.
+  *Mitigation:* there is no attendee search. The admin allowlist check is exact-match and rate-limited to 30 / hour per admin.
+- **T-A2-D1**: Megabytes in the contact field.
+  *Mitigation:* 2 MB request body cap (`lib/router.js`); contact field limited to 200 characters.
+- **T-A2-E1**: Stored XSS aimed at an admin viewing the row.
+  *Mitigation:* auto-escaping `html\`\`` template ([`docs/security/xss.md`](docs/security/xss.md)); admin pages share the attendee CSP.
 
-#### A1, Repudiation
+### Asset A3: ride metadata
 
-- **T-A1-R1**: An admin removes an attendee, then denies it.
-  *Mitigation:* every allowlist mutation writes an `audit` row with actor session ID and a content hash. Audit chaining is planned (see [`docs/security/audit-tampering.md`](docs/security/audit-tampering.md)).
+Origin, destination, departure time, seats, pairings, optional notes.
 
-#### <a id="a1-id"></a>A1, Information disclosure (enumeration)
+- **T-A3-S1**: Ride posted under someone else's display name.
+  *Mitigation:* `attendee_id` from the session, not the body. Display name changes audited.
+- **T-A3-T1**: Editing someone else's ride (e.g., destination to a trap).
+  *Mitigation:* ownership check on update; changes audited.
+- **T-A3-T2**: Racing the seat counter to over/underbook.
+  *Mitigation:* claims and decisions run in `BEGIN IMMEDIATE` (`tx()` in `lib/db.js`), locked before the seat count is read; capacity checked there (`lib/rides.js`, `tests/unit/ride-capacity.test.js`). No schema `CHECK` backstop; this code path is the only enforcement.
+- **T-A3-R1**: Driver cancels after the rider committed travel.
+  *Mitigation:* audited; not preventable. A cancellation counter on profiles is not implemented.
+- **T-A3-I1**: Scraping rides for home or hotel locations.
+  *Mitigation (current):* rides are visible only to signed-in, allowlisted attendees. A custom pickup pin is shown at the coordinates the poster chose, so posters should pick a public spot or a meetup point. *Planned:* coarsen custom pins for everyone but matched riders.
+- **T-A3-I2**: Tile provider learns ride locations from tile requests.
+  *Mitigation:* none in the app: the browser fetches tiles directly from the configured provider. Self-hosted tiles (`map.customTileUrl`) close the channel.
+- **T-A3-D1**: Ride spam buries real rides.
+  *Mitigation:* per-user rate limits: 5 ride posts and 10 claims per 10 minutes (`routes/rides.js`); posting requires an allowlisted account.
+- **T-A3-E1**: Stored XSS in a note.
+  *Mitigation:* `html\`\`` auto-escape; CSP without `unsafe-inline`; no SVG uploads in the field. See [`docs/security/xss.md`](docs/security/xss.md).
 
-This is the highest-likelihood threat against A1 and we treat it carefully.
+### Asset A4: deployment Ed25519 signing key
 
-- **T-A1-I1**: An attacker iterates likely emails and observes whether each is in the allowlist (HTTP response shape, response time, or magic-link delivery).
-  *Mitigation:*
-  - Response body is identical for any email submitted at the sign-in form ("If you are on the list, a link is on the way.").
-  - Status code is identical (`200`).
-  - Server inserts an artificial random delay sampled from a distribution that dominates the real allowlist-check time (see [`docs/security/timing-attacks.md`](docs/security/timing-attacks.md)).
-  - HMAC comparison is constant-time (`crypto.timingSafeEqual`).
-  - Per-IP rate limit kicks in at 5 sign-in attempts / 5 minutes; per-email rate limit at 3 / hour.
-- **T-A1-I2**: An insider with DB read access scans the allowlist for known targets.
-  *Mitigation:* allowlist rows store `HMAC(server_secret, email)`, not plaintext. The insider must already know which emails to check (offline dictionary attack); they cannot bulk-export the guest list.
-- **T-A1-I3**: Attacker reads the allowlist via a backup leak.
-  *Mitigation:* same as T-A1-I2 — backups inherit the HMAC protection. Backups MUST be encrypted at rest (operator responsibility, in [`RUNBOOK.md`](RUNBOOK.md#backup-procedure)).
+Signs Verifiable Credentials for the deployment's `did:web` identity.
 
-#### A1, Denial of service
-
-- **T-A1-D1**: Attacker fills the allowlist with garbage HMACs.
-  *Mitigation:* admin-only mutation; rate-limited; allowlist is bounded by event size (typical ≤2,000 rows).
-
-#### A1, Elevation of privilege
-
-- **T-A1-E1**: A regular attendee elevates to admin by adding themselves to `ADMIN_EMAILS`.
-  *Mitigation:* `ADMIN_EMAILS` is read from process env at startup; no code path writes it from a request.
-
----
-
-### Asset A2 — attendee out-of-band contact
-
-Stored after sign-in. Free-text fields that an attendee can edit on their own profile.
-
-#### A2, Spoofing
-
-- **T-A2-S1**: Attacker pretends to be a different attendee in a chat, bypassing the trust model.
-  *Mitigation:* contact info is shown alongside the attendee's `did:key` and (if presented) any verifiable credentials. Attendees are educated in the UI to prefer the cryptographic identifier over the human-readable name. Out of band collisions are inherent to free-text and we do not solve them.
-
-#### A2, Tampering
-
-- **T-A2-T1**: Attacker modifies another attendee's contact info via a write endpoint.
-  *Mitigation:* mutation endpoints take the actor from the session, never from the request body. Ride and claim ownership checks live in `lib/rides.js`; `tests/unit/ride-capacity.test.js` and `tests/e2e/full-flow.test.js` exercise them.
-
-#### A2, Repudiation
-
-- **T-A2-R1**: Attendee deletes their contact info, then claims someone else did.
-  *Mitigation:* profile mutations are audited.
-
-#### A2, Information disclosure
-
-- **T-A2-I1**: Public listing of all attendees with contact info.
-  *Mitigation:* contact info is only shown to other signed-in attendees who are part of the same ride or meetup, never on a public page.
-- **T-A2-I2**: SQL injection extracts contact info.
-  *Mitigation:* all queries are parameterised via `db.prepare(...).run(...)`. Code review checklist forbids string-concatenated SQL.
-- **T-A2-I3**: Attacker scrapes via the search endpoint.
-  *Mitigation:* search endpoint is rate-limited and returns at most 20 results, never matching by partial email.
-
-#### A2, DoS
-
-- **T-A2-D1**: Attacker stuffs the contact field with megabytes of data.
-  *Mitigation:* request body cap is 64KB (`server.js` body parser). Per-field validators reject anything over 256 bytes.
-
-#### A2, EoP
-
-- **T-A2-E1**: Attacker uses contact-update endpoint as an XSS vector to escalate via an admin viewing the row.
-  *Mitigation:* all rendering uses the auto-escaping `html\`\`` template (see [`docs/security/xss.md`](docs/security/xss.md)). Admin pages have the same CSP as attendee pages.
-
----
-
-### Asset A3 — ride metadata
-
-Origin, destination, time of departure, available seats, claimed seats, pairings, and the optional free-text "notes" field.
-
-#### A3, Spoofing
-
-- **T-A3-S1**: Attacker creates a ride pretending to be someone else (different display name).
-  *Mitigation:* `attendee_id` on the ride is taken from session, not from the request body. Display name changes are audited.
-
-#### A3, Tampering
-
-- **T-A3-T1**: Attacker modifies a ride that is not theirs (changes destination to a trap).
-  *Mitigation:* update endpoints check ownership. The audit log records who changed what.
-- **T-A3-T2**: Attacker manipulates the seat counter via concurrent requests (race) to overbook or underbook.
-  *Mitigation:* every claim and decision runs inside a `BEGIN IMMEDIATE` transaction (`tx()` in `lib/db.js`), which takes the write lock before the seat count is read, and remaining capacity is checked there (`lib/rides.js`, `tests/unit/ride-capacity.test.js`). There is no `CHECK` constraint backstop in the schema: capacity is enforced by that code path alone.
-
-#### A3, Repudiation
-
-- **T-A3-R1**: Driver cancels the ride after the rider has committed travel.
-  *Mitigation:* cancellations are audited; out-of-band we cannot prevent this. The trust dashboard surfaces a "cancelled-after-claim" counter on the driver's profile.
-
-#### A3, Information disclosure
-
-- **T-A3-I1**: Public scraping of all rides exposes attendees' home addresses or hotel locations.
-  *Mitigation:* ride locations are coarsened to a configurable radius (default 250m) before being shown to anyone other than the matched rider. The driver enters the precise location; the public view shows the snapped center of a rounded grid cell.
-- **T-A3-I2**: Map tile provider learns the location of every ride via tile requests.
-  *Mitigation:* tile fetches are server-side proxied for default tile styles; per-request anonymisation via batched fetches; remote attribution is removed before forwarding. Operators can self-host tiles to fully cut this channel.
-
-#### A3, DoS
-
-- **T-A3-D1**: Attendee posts thousands of rides, hiding real ones.
-  *Mitigation:* per-attendee active-ride cap (default 5). Configurable in `event.config.yaml`.
-
-#### A3, EoP
-
-- **T-A3-E1**: Attendee escalates a ride note into stored XSS to compromise admins viewing the ride list.
-  *Mitigation:* notes are rendered via `html\`\`` (auto-escape) and a strict CSP without `unsafe-inline`. SVG uploads are not allowed in this field. See [`docs/security/xss.md`](docs/security/xss.md).
-
----
-
-### Asset A4 — deployment Ed25519 signing key
-
-This is the private key used by the deployment to issue Verifiable Credentials over the `did:web` identity.
-
-#### A4, Spoofing
-
-- **T-A4-S1**: Attacker presents a forged credential signed by a key they control, claiming it is from this deployment.
-  *Mitigation:* verifier resolves `did:web:event.example.com` and only accepts credentials whose `kid` matches a key listed in the resolved DID document. The deployment's `did.json` is served from `/.well-known/did.json` over TLS.
-
-#### A4, Tampering
-
-- **T-A4-T1**: Attacker tampers with `secrets/deployment.key` on disk.
-  *Mitigation:* the key file is written mode 0600 and a wider mode warns at boot; `lib/keys.js` compares the public key derived from the file against the one recorded in `deployment_identity` when the key was first adopted, and refuses to load on a mismatch.
-
-#### A4, Repudiation
-
+- **T-A4-S1**: Credential signed with an attacker key, claimed as ours.
+  *Mitigation:* verifier resolves `did:web:event.example.com` and accepts only a `kid` in the resolved DID document (`/.well-known/did.json` over TLS).
+- **T-A4-T1**: `secrets/deployment.key` tampered with on disk.
+  *Mitigation:* written mode 0600; wider mode warns at boot. `lib/keys.js` refuses to load if the derived public key differs from the one recorded in `deployment_identity` at first adoption.
 - **T-A4-R1**: Deployment issues a bad credential and denies it.
-  *Mitigation:* every credential issuance is audited with the credential ID, subject DID, and issued-at timestamp. The credential itself is independently verifiable by anyone holding it.
+  *Mitigation:* each issuance audited (credential ID, subject DID, issued-at); holders can verify independently.
+- **T-A4-I1**: Key leaked via backup.
+  *Mitigation:* key is outside the DB, so `scripts/backup.mjs` (SQLite only) skips it; it warns if a snapshot holds a pre-migration key row. Operator key backups MUST be encrypted (KMS or age); [`RUNBOOK.md`](RUNBOOK.md#backup-procedure).
+- **T-A4-I2**: Key in a log line.
+  *Mitigation:* `lib/log.js` writes only allowlisted field names and reports dropped names without values. `lib/keys.js` logs no key material.
+- **T-A4-D1**: Key-rotation storm.
+  *Mitigation:* rotation is manual; no request path rotates.
+- **T-A4-E1**: Playground tricked into treating an attacker key as ours.
+  *Mitigation:* deployment key path is hardcoded; the playground resolves the credential's issuer DID fresh. No "trust the input issuer" path.
 
-#### A4, Information disclosure
+### Asset A5: user signing keys (`did:key`)
 
-- **T-A4-I1**: Key file leaked via backup.
-  *Mitigation:* the key is a file outside the database, so the SQLite-only backup (`scripts/backup.mjs`) does not copy it; that script also warns if a snapshot still carries a pre-migration key row. If the operator chooses to back the key up, the backup MUST be encrypted (KMS or age). Documented in [`RUNBOOK.md`](RUNBOOK.md#backup-procedure).
-- **T-A4-I2**: Key disclosed via log file.
-  *Mitigation:* `lib/log.js` writes only allowlisted field names and reports any dropped name without its value, so key material cannot reach a log line by being passed as a new field. `lib/keys.js` logs no key material at all.
+In browser IndexedDB. The server sees only the public key (in the `did:key`) and challenge signatures.
 
-#### A4, DoS
-
-- **T-A4-D1**: Attacker triggers a key-rotation storm.
-  *Mitigation:* key rotation is a manual operator action; no request path can rotate the key.
-
-#### A4, EoP
-
-- **T-A4-E1**: Attacker convinces the verifier playground to use an attacker-controlled key as the deployment key.
-  *Mitigation:* the deployment key path is hardcoded; the verifier playground takes its issuer DID from the credential being verified and resolves it fresh — there is no "trust the input issuer" code path.
-
----
-
-### Asset A5 — user signing keys (`did:key`)
-
-Held in the browser's IndexedDB. The server never sees the private key; we only ever receive the public part embedded in the user's `did:key` DID and signatures over challenges.
-
-#### A5, Spoofing
-
-- **T-A5-S1**: Attacker presents a `did:key` and signs a challenge, claiming to be a known attendee.
-  *Mitigation:* binding between an email-on-the-allowlist and a `did:key` happens on first sign-in; the binding is stored in the `attendees` table and audited. Subsequent sign-ins require a signature over a server-issued challenge with the bound key.
-
-#### A5, Tampering
-
-- **T-A5-T1**: Attacker modifies the binding to point an email at their own `did:key`.
-  *Mitigation:* binding is set once per attendee; rebind requires a fresh magic-link flow and is audited. Optional: an attendee can publish their `did:key` as a cross-event credential for portability.
-
-#### A5, Repudiation
-
+- **T-A5-S1**: Attacker signs a challenge with their own `did:key`, claiming to be an attendee.
+  *Mitigation:* email-to-`did:key` binding set on first sign-in, stored in `attendees`, audited. Later sign-ins need a signature from the bound key over a server challenge.
+- **T-A5-T1**: Binding repointed to the attacker's key.
+  *Mitigation:* set once; rebind needs a fresh magic-link flow and is audited. Optional: publish the `did:key` as a cross-event credential.
 - **T-A5-R1**: User signs a credential, then denies it.
-  *Mitigation:* signatures are non-repudiable by design; verifier playground produces a deterministic verification trace.
+  *Mitigation:* signatures are non-repudiable; playground gives a deterministic verification trace.
+- **T-A5-I1**: Key extracted via XSS.
+  *Mitigation:* CSP forbids inline scripts and `eval`; non-extractable `CryptoKey` where supported; never in the DOM.
 
-#### A5, Information disclosure
+DoS / EoP: nothing asset-specific; see cross-cutting threats.
 
-- **T-A5-I1**: Browser-side key extraction via XSS.
-  *Mitigation:* CSP forbids inline scripts and `eval`; key material is held in a non-extractable `CryptoKey` where the browser supports it. Even if extractable, the key never appears in the DOM.
+### Asset A6: audit log
 
-#### A5, DoS / EoP
+Append-only record of privileged actions for forensics.
 
-- N/A specific — see cross-cutting threats.
-
----
-
-### Asset A6 — audit log
-
-An append-only record of privileged actions, intended to enable post-event forensics.
-
-#### A6, Spoofing
-
-- **T-A6-S1**: Attacker writes audit entries attributing actions to others.
-  *Mitigation:* only the server writes audit rows; the actor field is derived from the session, not from the request body.
-
-#### A6, Tampering
-
-- **T-A6-T1**: Attacker (or insider with DB write) edits or deletes audit rows.
-  *Mitigation (current):* file-system permissions on the database file; `audit_log` has `BEFORE UPDATE` and `BEFORE DELETE` triggers that raise (`lib/db.js`).
-  *Mitigation (planned):* hash-chain each row to the previous (`prev_hash`, `row_hash`); break detection on every read. Tracked in [`docs/security/audit-tampering.md`](docs/security/audit-tampering.md).
-
-#### A6, Repudiation
-
-- **T-A6-R1**: Operator denies an action recorded in the audit.
-  *Mitigation:* once the hash chain ships and the head is published periodically (e.g., signed and posted to a public bulletin), the operator cannot quietly re-write history without detection.
-
-#### A6, Information disclosure
-
-- **T-A6-I1**: Attendee reads the full audit log.
+- **T-A6-S1**: Forged entries blaming others.
+  *Mitigation:* only the server writes rows; actor from the session.
+- **T-A6-T1**: Attacker or DB-write insider edits or deletes rows.
+  *Mitigation (current):* DB file permissions; `BEFORE UPDATE` / `BEFORE DELETE` triggers on `audit_log` that raise (`lib/db.js`).
+  *Mitigation (planned):* hash chain (`prev_hash`, `row_hash`) checked on every read ([`docs/security/audit-tampering.md`](docs/security/audit-tampering.md)).
+- **T-A6-R1**: Operator denies an audited action.
+  *Mitigation:* once the chain ships with a periodically published head (e.g., signed, posted to a public bulletin), rewrites are detectable.
+- **T-A6-I1**: Attendee reads the full log.
   *Mitigation:* admin-only endpoint.
+- **T-A6-D1**: Log flooded with junk.
+  *Mitigation:* every audit-writing path is rate-limited or admin-gated.
 
-#### A6, DoS
-
-- **T-A6-D1**: Attacker fills the audit log with junk.
-  *Mitigation:* every audit-writing path is itself rate-limited or admin-gated.
-
-#### A6, EoP
-
-- N/A.
+EoP: N/A.
 
 ### Asset A10: live location
 
-Shared only after the user taps "Share my location" on the map, and only while that page is open. Code: `lib/live.js`, `routes/live.js`.
+Shared only after "Share my location" is tapped on the map, and only while that page is open. Code: `lib/live.js`, `routes/live.js`.
 
-- **T-A10-I1**: Someone who isn't your ride partner watches you move.
-  *Mitigation:* each position event is sent only to the sharer and people on a non-cancelled ride with them through an accepted claim. The check runs per event, not once at subscribe time, so a cancelled match stops delivery within the 10-second partner cache. Covered by `tests/e2e/live.test.js`.
-- **T-A10-I2**: Location history leaks from storage, backups or logs.
-  *Mitigation:* nothing is written to disk. The server keeps the latest point per user in memory and drops it after 2 minutes without an update, on "stop", or on restart.
-- **T-A10-D1**: A client floods position updates.
-  *Mitigation:* 40 updates a minute per user, coordinates and accuracy range-checked; the browser sends at most one every 4 seconds.
-- **T-A10-S1**: Fake demo attendees mistaken for real people.
-  *Mitigation:* synthetic movement exists only in `DEMO_MODE`, is computed from the clock, and is marked `synthetic` and drawn grey.
+- **T-A10-I1**: Someone other than a ride partner watches you move.
+  *Mitigation:* sent only to the sharer and people on a non-cancelled ride with them via an accepted claim. Checked per event: a cancelled match stops within the 10-second partner cache. `tests/e2e/live.test.js`.
+- **T-A10-I2**: History leaks via storage, backups or logs.
+  *Mitigation:* nothing on disk. Latest point per user in memory, dropped after 2 minutes idle, on "stop", or on restart.
+- **T-A10-D1**: Client floods updates.
+  *Mitigation:* 40/min per user; coordinates and accuracy range-checked; browser sends at most one per 4 seconds.
+- **T-A10-S1**: Demo attendees mistaken for real people.
+  *Mitigation:* synthetic movement only in `DEMO_MODE`, computed from the clock, marked `synthetic`, drawn grey.
 
-Browsers stop geolocation when the tab is closed or backgrounded, so there is no background tracking. The page holds a Screen Wake Lock while sharing to keep the screen on. `Permissions-Policy` allows `geolocation` and `screen-wake-lock` for this origin only.
+Geolocation stops when the tab closes or backgrounds: no background tracking. The page holds a Screen Wake Lock while sharing. `Permissions-Policy` allows `geolocation` and `screen-wake-lock` for this origin only.
 
 ---
 
 ## Cross-cutting threats
 
-These do not map cleanly to a single asset.
-
 ### CC-1: Spoofed `did:key`
 
-**Threat:** An attacker generates a key pair and presents the corresponding `did:key`, claiming to be a particular attendee.
-**Mitigation:** the binding between email (allowlist proof) and `did:key` is established on first sign-in via the magic-link flow. After binding, sign-in requires a signed challenge over the bound key. There is no "trust this DID because it claims to be X" code path.
+**Threat:** attacker claims their `did:key` belongs to an attendee.
+**Mitigation:** bound to the allowlisted email at first magic-link sign-in; later sign-ins need a challenge signed by that key. No "trust this DID because it says so" path.
 
 ### CC-2: Tampered audit log
 
-**Threat:** As described under A6 — current state is mutable for an insider with DB write.
+**Threat:** see A6; mutable today for a DB-write insider.
 **Mitigation status:** acknowledged; hash chain in [`docs/security/audit-tampering.md`](docs/security/audit-tampering.md).
 
 ### CC-3: Replayed magic links
 
-**Threat:** Attacker captures a magic link in flight (e.g., MITM on email transit) and uses it before the legitimate user.
-**Mitigation:**
-
-- Magic links are single-use: the row is deleted in the same transaction that creates the session.
-- Validity window is 10 minutes from issuance.
-- The link's path-component token has 256 bits of entropy.
-- Token comparison is constant-time.
-- Use of an already-consumed token returns identical response shape to a bad token.
+**Threat:** link intercepted (e.g., email transit MITM) and used first.
+**Mitigation:** single use (row deleted in the transaction that creates the session); valid 15 minutes; 256-bit query-string token, stored only as an HMAC and looked up by that hash; a consumed token gets the same response as a bad one.
 
 ### CC-4: Allowlist enumeration
 
-See [T-A1-I1](#a1-id). The mitigation is identical response shape, identical timing, plus rate limits.
+See [T-A1-I1](#a1-id): identical response and timing, plus rate limits.
 
 ### CC-5: SSRF via `did:web`
 
-**Threat:** Attacker creates a credential with `iss: did:web:internal-service.local` so the verifier reaches into our internal network.
-**Mitigation:** the resolver enforces:
-
-- DNS resolution to public IP space only (RFC1918, loopback, link-local, IPv6 ULA all refused).
-- TLS required.
-- Redirects refused (`redirect: 'error'`).
-- Body cap at 16KB.
-- Timeout at 5s.
-- Per-host concurrency cap.
-See [`docs/security/ssrf.md`](docs/security/ssrf.md) for details.
+**Threat:** `iss: did:web:internal-service.local` points the verifier at internal hosts.
+**Mitigation:** resolver allows public IPs only (RFC1918, loopback, link-local, IPv6 ULA refused); TLS required; redirects refused (`redirect: 'error'`); 16KB body cap; 5s timeout; per-host concurrency cap. See [`docs/security/ssrf.md`](docs/security/ssrf.md).
 
 ### CC-6: XSS via SVG logo
 
-**Threat:** Operator (or attacker who reaches the logo-upload endpoint) uploads an SVG containing `<script>` or `onload="..."` attributes.
-**Mitigation:**
-
-- Logo upload is admin-only.
-- Server-side SVG sanitiser strips `<script>`, `<foreignObject>`, all event-handler attributes, and external references (`xlink:href`, `href` to non-`#` targets).
-- SVG is not an accepted logo format (`lib/assets.js` allows PNG, WebP and JPEG only), so no
-  sanitiser is required. The logo is served with `Content-Security-Policy: default-src 'none'`
-  and `X-Content-Type-Options: nosniff`.
-- Logo is rendered via `<img>`, never `<object>` or `<iframe>`, so even surviving script tags would not execute.
+**Threat:** logo SVG with `<script>` or `onload="..."`.
+**Mitigation:** upload is admin-only. SVG is not accepted (`lib/assets.js` allows PNG, WebP, JPEG), so there is no sanitiser. Served with `Content-Security-Policy: default-src 'none'` and `X-Content-Type-Options: nosniff`; rendered via `<img>`, never `<object>` or `<iframe>`.
 
 ### CC-7: CSP bypass
 
-**Threat:** An attacker finds a way to execute arbitrary script despite the CSP.
-**Mitigation:**
-
-- CSP is `default-src 'self'; script-src 'self' 'nonce-<per-request>'; style-src 'self' 'nonce-<per-request>'; img-src 'self' data: <tile-host>; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'`.
-- No `unsafe-inline`, no `unsafe-eval`, no wildcards.
-- Nonce is a per-request 128-bit random.
-- The `html\`\`` template auto-escapes interpolations, so script execution requires CSP failure AND escaping failure simultaneously.
-- See [`docs/security/xss.md`](docs/security/xss.md).
+**Threat:** script runs despite CSP.
+**Mitigation:** CSP is `default-src 'self'; script-src 'self' 'nonce-<per-request>'; style-src 'self' 'nonce-<per-request>'; img-src 'self' data: <tile-host>; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'`. No `unsafe-inline`, `unsafe-eval`, or wildcards; 128-bit per-request nonce. `html\`\`` auto-escapes, so an exploit needs CSP and escaping to fail together. See [`docs/security/xss.md`](docs/security/xss.md).
 
 ### CC-8: Race conditions on confirmation
 
-**Threat:** Two riders click "claim seat" simultaneously and both succeed when only one seat exists.
-**Mitigation:** SQLite `BEGIN IMMEDIATE` transaction with `CHECK` constraint on `claimed_seats <= total_seats`. The losing transaction sees a constraint violation and the UI shows "seat just taken — refresh."
+**Threat:** two riders both get the last seat.
+**Mitigation:** `BEGIN IMMEDIATE`; capacity checked under the write lock in `lib/rides.js`. No schema `CHECK` constraint. See T-A3-T2.
 
 ### CC-9: Timing attacks on email auth
 
-**Threat:** Attacker uses the time between request and response to determine whether an email is in the allowlist.
-**Mitigation:** see [`docs/security/timing-attacks.md`](docs/security/timing-attacks.md). Constant-time HMAC comparison plus an artificial random delay drawn from a distribution chosen so the in/out-of-allowlist distributions are statistically indistinguishable at the relevant per-IP rate limit.
+**Threat:** timing reveals allowlist membership.
+**Mitigation:** constant-time HMAC compare plus a random delay making in-list and out-of-list timings statistically indistinguishable at the per-IP rate limit. See [`docs/security/timing-attacks.md`](docs/security/timing-attacks.md).
 
 ### CC-10: Open redirect on the magic link return URL
 
-**Threat:** Attacker passes `?next=https://evil.example.com` and lures the victim into clicking a magic link that, after auth, redirects them to a phishing page.
-**Mitigation:** the `next` parameter is parsed and only the path component is preserved; scheme and host are dropped; relative paths only.
+**Threat:** `?next=https://evil.example.com` redirects to phishing after auth.
+**Mitigation:** only the path of `next` is kept (relative only; scheme and host dropped).
 
 ### CC-11: Admin-controlled HTML in map tile attribution
 
-**Threat:** `event.config.yaml#map.customAttribution` is deliberately admin-settable HTML (operators need to credit a non-default tile provider, which usually requires a link). An admin account takeover, or a malicious value committed to `event.config.yaml`, could otherwise inject script via this field.
-**Mitigation:** the client (`public/map.js`) never assigns it through `innerHTML`. It parses the value with `DOMParser`, then walks the resulting node tree and rebuilds it into the live DOM keeping only text nodes and `<a href="http(s)://...">` elements — every other element, and every attribute on the ones kept other than `href`, is dropped, so event handlers and non-text children never reach the page. Trust boundary: this protects against the field itself being hostile; it does not need to defend against the admin who sets it, since setting it already requires the `U-admin` / `A-admin` role from the [Actors](#actors) table.
+**Threat:** `event.config.yaml#map.customAttribution` is admin-set HTML by design (tile credits usually need a link); an admin takeover or malicious commit could inject script.
+**Mitigation:** `public/map.js` never uses `innerHTML`; it parses with `DOMParser` and rebuilds only text nodes and `<a href="http(s)://...">`, dropping every other element and every attribute but `href`. This guards against a hostile value; whoever sets it already has `U-admin` / `A-admin` ([Actors](#actors)).
 
 ### CC-12: Replayed or forged SD-JWT VC presentations
 
-**Threat:** a captured selective-disclosure presentation is replayed to the verifier; a holder adds disclosures the issuer never signed, re-uses one, or rewrites a visible claim through a disclosure; a forger signs with their own key; or an unauthenticated caller floods the nonce table.
-**Mitigation:** `lib/sd-jwt.js` follows RFC 9901 §7: it rejects `alg: none` and any key/alg mismatch, a repeated disclosure or digest, an unreferenced disclosure, and a disclosure that collides with a visible claim or uses a reserved name. Key binding is checked against `cnf.jwk`, with `aud`, a bounded `iat` window and `sd_hash` over the exact presentation. The playground's nonces (`lib/verifier.js`) are single-use, expire after five minutes, and are consumed by one atomic `UPDATE`, so a replay fails; `/trust/verify/nonce` is rate-limited per IP and expired nonces are deleted on each issue. A remote issuer's keys are fetched only through `lib/safe-fetch.js` (see CC-5), and its metadata `issuer` must equal the credential's `iss`. Tests: `tests/unit/sd-jwt.test.js`, `tests/e2e/demo-mode.test.js`.
+**Threat:** replay; unsigned, reused, or claim-overwriting disclosures; self-signed forgery; nonce-table flood.
+**Mitigation:** `lib/sd-jwt.js` follows RFC 9901 §7: rejects `alg: none`, key/alg mismatch, repeated disclosures or digests, unreferenced disclosures, and disclosures that collide with a visible claim or use a reserved name. Key binding: `cnf.jwk`, `aud`, bounded `iat`, `sd_hash` over the exact presentation. Playground nonces (`lib/verifier.js`): single-use, 5-minute expiry, consumed by one atomic `UPDATE`. `/trust/verify/nonce` is rate-limited per IP and purges expired nonces on each issue. Remote issuer keys fetched only via `lib/safe-fetch.js` (CC-5); metadata `issuer` must equal `iss`. Tests: `tests/unit/sd-jwt.test.js`, `tests/e2e/demo-mode.test.js`.
 
 ### CC-13: Stolen or guessed OpenID4VCI offers
 
-**Threat:** someone photographs a credential offer QR code, guesses the PIN, replays a pre-authorized code, access token or proof, or gets a credential bound to their own key for someone else's ride.
-**Mitigation:** the offer only re-issues the attendee's own credential, and the PIN (rendered once in the POST response, never stored in clear) is required at the token endpoint. Five wrong PINs burn the code, and the attempt counter commits even when the request fails. Code, token and nonce are single-use and short-lived, and the token endpoint is rate-limited per IP. Proof JWTs must carry the issuer as `aud`, a fresh `iat` and a live single-use nonce, and their signature must verify with the key they bind. Residual: whoever holds both the QR code and the PIN within ten minutes gets the credential, which is the pre-authorized flow's trust model. Tests: `tests/e2e/oid4vci.test.js`.
+**Threat:** photographed QR, guessed PIN, replayed code/token/proof, or someone else's credential bound to the attacker's key.
+**Mitigation:** offers only re-issue the attendee's own credential. PIN (shown once in the POST response, never stored in clear) required at the token endpoint; five wrong PINs burn the code, and the counter commits even on failed requests. Code, token, nonce: single-use, short-lived; token endpoint rate-limited per IP. Proof JWTs need issuer `aud`, fresh `iat`, a live single-use nonce, and a valid signature by the key they bind. Residual: QR plus PIN within ten minutes gets the credential (pre-authorized flow's trust model). Tests: `tests/e2e/oid4vci.test.js`.
 
 ### CC-14: Spoofed verifiers and replayed OpenID4VP responses
 
-**Threat:** a page impersonates a verifier to harvest claims; a captured `vp_token` is replayed to the same or another verifier; someone posts a response for a request they did not receive; a forged request makes the in-app holder post claims to an attacker's endpoint.
-**Mitigation:** requests are signed by the verifier's did:web key (`decentralized_identifier` prefix), and the in-app holder checks that signature against the DID document's `assertionMethod` before showing the request, then sends only the requested claims. A response is accepted only for a live, unanswered `state`; the key binding must name the full client identifier as `aud` and carry that request's `nonce`, so a presentation made for one verifier or request fails at any other; a request settles only on a valid presentation, with an atomic status update, and an invalid or junk response leaves it pending (the `state` is in the request object, so letting it settle as failed would let any bystander void a verification). Status reads need a separate random token held only by the verifier's page; the request id printed in the QR code does not unlock the result. Remote requests are fetched through `lib/safe-fetch.js`. Residual: the holder trusts whatever verifier controls the DID's domain, the usual did:web assumption. Tests: `tests/e2e/oid4vp.test.js`.
+**Threat:** fake verifier harvesting claims; `vp_token` replay to any verifier; responses to requests never received; forged request steering the in-app holder to an attacker endpoint.
+**Mitigation:** requests signed by the verifier's did:web key (`decentralized_identifier` prefix); the in-app holder verifies it against the DID document's `assertionMethod` and sends only requested claims. Responses accepted only for a live, unanswered `state`; key binding must carry the full client identifier as `aud` and that request's `nonce`. Only a valid presentation settles a request (atomic status update); junk leaves it pending, since `state` is public in the request object and any bystander could otherwise void a verification. Status reads need a separate random token held by the verifier's page; the QR request id isn't enough. Remote requests via `lib/safe-fetch.js`. Residual: holder trusts whoever controls the DID's domain (standard did:web assumption). Tests: `tests/e2e/oid4vp.test.js`.
 
 ### CC-15: Forged, replayed or reflected DIDComm messages
 
-**Threat:** a message claims a sender it was not encrypted by; a ciphertext is tampered with; an attacker publishes a DID whose DIDComm endpoint points at a victim, so this agent's replies hit the victim; a flood of large messages exhausts the server.
-**Mitigation:** authcrypt binds the sender: the KEK derivation uses the sender's static X25519 key from its own DID document's `keyAgreement`, and the plaintext `from` must equal the `skid` DID, so a forged sender fails to decrypt. A256CBC-HS512's tag is checked in constant time before decryption, and `apv` must match the recipient key ids. Replies go only to authcrypt senders, at the endpoint their own document declares, via `lib/safe-fetch.js` (public HTTPS only, no redirects), rate-limited per sender: one inbound message yields at most one small outbound one. Inbound messages are capped at 64 KB and rate-limited per IP, and the message log keeps the last 500 rows. Discover Features match patterns are compared by plain string scanning, never a regular expression. Residual: an inbound authcrypt message makes the server resolve the sender's did:web before it can decrypt, so each such POST can cause one outbound GET through `lib/safe-fetch.js`, as `/trust/verify` already does for VC issuers. Tests: `tests/unit/didcomm-crypto.test.js`, `tests/e2e/didcomm.test.js`.
+**Threat:** forged sender; tampered ciphertext; attacker DID with its endpoint aimed at a victim, reflecting our replies; large-message flood.
+**Mitigation:** authcrypt KEK derivation uses the sender's static X25519 key from its DID document's `keyAgreement`, and plaintext `from` must equal the `skid` DID, so forged senders fail to decrypt. A256CBC-HS512 tag checked in constant time before decryption; `apv` must match recipient key ids. Replies go only to authcrypt senders, at their own declared endpoint, via `lib/safe-fetch.js` (public HTTPS, no redirects), rate-limited per sender: at most one small outbound per inbound. Inbound capped at 64 KB, rate-limited per IP; message log keeps the last 500 rows. Discover Features patterns matched by plain string scan, never regex. Residual: each inbound authcrypt POST can trigger one pre-decryption did:web GET via `lib/safe-fetch.js`, as `/trust/verify` does for VC issuers. Tests: `tests/unit/didcomm-crypto.test.js`, `tests/e2e/didcomm.test.js`.
 
 ---
 
 ## In-scope vs out-of-scope
 
-### In scope (we model and mitigate)
+**In scope (modeled and mitigated):** authentication and authorization bypass; credential forgery and replay; XSS and CSP bypass; CSRF (SameSite cookies, `form-action 'self'`, signed double-submit token on `/admin` writes; no `Origin` check); SSRF via `did:web`; audit log tampering (current mitigation acknowledged incomplete); allowlist enumeration; races on safety-relevant state; timing side channels on auth and allowlist endpoints; open redirects; information disclosure via error messages; SQL injection (parameterised queries).
 
-- Authentication and authorization bypass.
-- Credential forgery and replay.
-- XSS, CSP bypass.
-- CSRF (defense via SameSite cookies, `form-action 'self'`, and a signed double-submit token on `/admin` writes; there is no `Origin` header check).
-- SSRF via `did:web`.
-- Audit log tampering (with the caveat that the current mitigation is acknowledged-incomplete).
-- Allowlist enumeration.
-- Race conditions on safety-relevant state.
-- Timing side channels on auth and allowlist endpoints.
-- Open redirects.
-- Information disclosure via error messages.
-- SQL injection (defended structurally by parameterised queries).
-
-### Out of scope (we acknowledge but do not defend against)
-
-- Volumetric DoS — handled at the network edge.
-- Compromised host (root on the box).
-- Compromised Node.js runtime, `node:sqlite` build, or operating system.
-- Compromised CA issuing TLS for the deployment hostname.
-- Social engineering of attendees, admins, or maintainers.
-- Physical attacks on the host.
-- Attacks requiring control of the email provider's transit infrastructure (we treat email as a one-time bearer-token channel and accept that channel's well-known weaknesses).
-- Side channels in the underlying browser (Spectre, Rowhammer, GPU pixel leaks, etc.).
-- Attacks against weaknesses in fundamental crypto primitives (Ed25519, SHA-256, ChaCha20-Poly1305, HKDF).
+**Out of scope (acknowledged, not defended):** volumetric DoS (network edge); compromised host, Node.js runtime, `node:sqlite` build, or OS; a compromised CA issuing TLS for our hostname; social engineering of attendees, admins, or maintainers; physical attacks on the host; control of the email provider's transit (email is a one-time bearer-token channel, weaknesses accepted); browser side channels (Spectre, Rowhammer, GPU pixel leaks, etc.); breaks in Ed25519, SHA-256, ChaCha20-Poly1305, HKDF.
 
 ---
 
 ## Residual risks
 
-Risks we acknowledge and have chosen not to mitigate, with reasoning.
-
-1. **Compromised host = full compromise.** The signing key, the DB, and all in-flight magic links are accessible. We rely on the operator running on hardened infrastructure with disk encryption, short-lived snapshots, and a minimum-privilege deploy user. We do not implement HSM-backed signing in v1; that is a known gap.
-2. **Email is a one-time bearer-token channel.** Anyone who reads the magic-link email before the legitimate recipient can sign in. Mitigations are short TTL (10 min), single use, and same-IP-class binding (planned, not yet implemented).
-3. **Audit log is mutable for an insider with DB write.** Hash chain is planned and documented; v1 ships with file-system permissions plus triggers as the only barrier.
-4. **Cross-event trust is unilateral.** A peer deployment whose signing key we accept can issue credentials in our verifier without our consent. Counter-signature mitigation is planned. See [`docs/security/credential-forgery.md`](docs/security/credential-forgery.md).
-5. **Geo-coarsening is not a privacy primitive.** A motivated attacker who knows roughly where you live can still match a coarsened pin. Coarsening reduces casual snooping; it does not defend against a targeted adversary.
-6. **Tile provider can correlate ride locations** unless the operator self-hosts tiles. We document the risk.
-7. **No defense against a malicious browser extension** running in the attendee's browser. Such an extension can read keys from IndexedDB regardless of CSP.
-8. **No defense against TLS MITM with a CA-issued cert** for the deployment hostname (rogue CA, government-compelled cert).
+1. **Compromised host = full compromise** of signing key, DB, and in-flight magic links. Mitigated only by hardened infra (disk encryption, short-lived snapshots, minimum-privilege deploy user). No HSM signing in v1 (known gap).
+2. **Email is a one-time bearer-token channel.** First reader of the link signs in. 15-minute TTL, single use; same-IP-class binding planned, not implemented.
+3. **Audit log mutable for a DB-write insider.** Hash chain planned and documented; v1 has file permissions plus triggers only.
+4. **Cross-event trust is unilateral.** A peer whose key we accept issues credentials our verifier honors, without our consent. Counter-signature planned. See [`docs/security/credential-forgery.md`](docs/security/credential-forgery.md).
+5. **Custom pickup pins are exact.** Any signed-in attendee sees them; coarsening is planned, not implemented.
+6. **Tile provider can correlate ride locations** unless tiles are self-hosted.
+7. **Malicious browser extensions** can read keys from IndexedDB regardless of CSP. No defense.
+8. **TLS MITM with a CA-issued cert** for the deployment hostname (rogue CA, government-compelled cert). No defense.
 
 ---
 
 ## Assumptions
 
-The threat model relies on these assumptions. If any is violated, the analysis above is invalid for the corresponding portion.
+If one fails, the matching analysis is void.
 
-1. **TLS termination is correct.** The edge proxy (Caddy, nginx, Cloudflare, etc.) terminates TLS with a strong cipher suite and forwards `X-Forwarded-For` honestly.
-2. **`node:sqlite` is honest.** The bundled SQLite implementation respects parameter binding and constraint checks. We do not validate this against a hostile build.
-3. **Node `crypto` is correct.** `crypto.randomBytes`, `crypto.timingSafeEqual`, `crypto.createHmac`, and the WebCrypto Ed25519 path return what they claim.
-4. **The email provider does not actively forge messages from us.** A passive observer of provider infrastructure is in scope (CC-3); an active forger is treated as a compromised host of the provider — out of scope.
-5. **DNS for `did:web` resolution is honest** at the resolver level. We do not implement DNSSEC verification in the resolver.
-6. **Operators do not commit secrets to the repo.** `.env`, `secrets/`, and `data/` are gitignored.
-7. **Deployment hostname is unique per event.** We do not support a single hostname serving multiple events; the threat model assumes one-host-one-event.
-8. **Browser implements CSP correctly.** Attacks against the browser's CSP enforcement are out of scope (CC-7's mitigations rely on the browser doing its job).
-9. **The deployment is not behind a corporate proxy that strips security headers.** If it is, the CSP mitigation is degraded and the operator should add the headers at the upstream proxy too.
-10. **The audit log writer is the only writer to the `audit` table.** No application code path writes the audit table by any route other than the central `audit()` helper.
+1. **Edge TLS is correct.** The proxy (Caddy, nginx, Cloudflare, etc.) uses strong ciphers and forwards `X-Forwarded-For` honestly.
+2. **`node:sqlite` is honest** about parameter binding and constraints. Not tested against a hostile build.
+3. **Node `crypto` is correct:** `crypto.randomBytes`, `crypto.timingSafeEqual`, `crypto.createHmac`, WebCrypto Ed25519.
+4. **The email provider doesn't forge our mail.** Passive observers are in scope (CC-3); an active forger is a compromised provider, out of scope.
+5. **DNS for `did:web` is honest** at the resolver. No DNSSEC verification.
+6. **No secrets in the repo.** `.env`, `secrets/`, `data/` are gitignored.
+7. **One hostname per event.**
+8. **The browser enforces CSP** (CC-7 depends on it).
+9. **No proxy strips security headers.** Otherwise CSP degrades; add them upstream.
+10. **Only `audit()` writes the `audit` table.**
 
 ---
 
 ## Where to read more
 
-- [`SECURITY.md`](SECURITY.md) — disclosure policy and one-page summary.
-- [`TRUST.md`](TRUST.md) — DID and Verifiable Credential architecture, with full ceremony diagrams.
-- [`RUNBOOK.md`](RUNBOOK.md) — operator procedures.
-- [`docs/security/`](docs/security/) — per-control deep dives:
-  - [`csrf.md`](docs/security/csrf.md)
-  - [`xss.md`](docs/security/xss.md)
-  - [`ssrf.md`](docs/security/ssrf.md)
-  - [`credential-forgery.md`](docs/security/credential-forgery.md)
-  - [`timing-attacks.md`](docs/security/timing-attacks.md)
-  - [`audit-tampering.md`](docs/security/audit-tampering.md)
-- [`docs/code-reading-guide.md`](docs/code-reading-guide.md) — five-minute tour of the security-critical files.
-- [`docs/intentional-non-features.md`](docs/intentional-non-features.md) — what we deliberately don't build.
+- [`SECURITY.md`](SECURITY.md): disclosure policy, one-page summary.
+- [`TRUST.md`](TRUST.md): DID and VC architecture, ceremony diagrams.
+- [`RUNBOOK.md`](RUNBOOK.md): operator procedures.
+- [`docs/security/`](docs/security/): per-control deep dives: [`csrf.md`](docs/security/csrf.md), [`xss.md`](docs/security/xss.md), [`ssrf.md`](docs/security/ssrf.md), [`credential-forgery.md`](docs/security/credential-forgery.md), [`timing-attacks.md`](docs/security/timing-attacks.md), [`audit-tampering.md`](docs/security/audit-tampering.md).
+- [`docs/code-reading-guide.md`](docs/code-reading-guide.md): tour of the security-critical files.
+- [`docs/intentional-non-features.md`](docs/intentional-non-features.md): what we deliberately don't build.
 
 ---
 
@@ -549,5 +366,6 @@ The threat model relies on these assumptions. If any is violated, the analysis a
 | Version | Date | Notes |
 | --- | --- | --- |
 | 0.3.0 | 2026-04-30 | Initial public threat model, covering portable trust (DID + VC) plus everything from 0.1 / 0.2. |
+| 0.4.0 | 2026-10-08 | Added A10 live location; tightened wording. |
 
-> Future revisions are tracked alongside [`CHANGELOG.md`](CHANGELOG.md). Material changes to mitigations are called out in the `Security` subsection of the relevant release.
+Mitigation changes are also noted in the `Security` subsection of [`CHANGELOG.md`](CHANGELOG.md).

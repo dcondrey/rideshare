@@ -1,26 +1,14 @@
-# Portable trust — protocol & implementation
+# Portable trust: protocol and implementation
 
-This document describes how Event Rideshare implements **portable, cross-event
-trust**: a user's reputation built up across one event travels with them, in
-their own browser, to any other deployment of this software (or any
-W3C-compliant Verifiable Credentials verifier).
+Ride history from one event travels in the user's browser to any other deployment, or any W3C Verifiable Credentials verifier. No central registry.
 
-The implementation is designed to be **inspectable, standards-compliant, and
-self-hostable**. No central registry, no proprietary format, no lock-in.
+## TL;DR
 
-## TL;DR for the impatient
-
-- Each deployment has a **`did:web`** identifier anchored at
-  `https://<your-host>/.well-known/did.json`.
-- Each user generates their own **`did:key`** in the browser
-  (Ed25519, Web Crypto API). Private key lives in IndexedDB.
-- After both parties confirm a ride happened, the deployment issues each side
-  a **W3C Verifiable Credential** (compact JWT, EdDSA-signed) attesting the ride.
-- A user joining a new deployment **imports** their credentials. The new
-  deployment fetches each issuer's `did:web` document, verifies signatures, and
-  shows the cumulative trust profile.
-- Anyone can paste a credential into the **verifier playground** (`/trust/verify`)
-  to inspect it, even from a third-party deployment.
+- Each deployment has a `did:web` anchored at `https://<your-host>/.well-known/did.json`.
+- Each user generates a `did:key` in the browser (Ed25519, Web Crypto). The private key stays in IndexedDB.
+- When both parties confirm a ride, each gets a W3C Verifiable Credential (compact JWT, EdDSA).
+- Another deployment imports them by resolving the issuer's `did:web` and checking signatures.
+- `/trust/verify` inspects any credential, from any deployment.
 
 ## Standards used
 
@@ -33,35 +21,19 @@ self-hostable**. No central registry, no proprietary format, no lock-in.
 | Credential format | [VC-JWT (W3C)](https://www.w3.org/TR/vc-jwt/) | Compact JWT, `typ: vc+jwt` |
 | Signing | EdDSA (RFC 8032) | Ed25519, 64-byte signatures |
 
-The encoding is the VC-JWT 1.1 shape: the credential sits in a `vc` claim
-beside the registered JWT claims (`iss`, `sub`, `nbf`, `iat`, `jti`), and the
-credential body uses the VC 2.0 vocabulary (`@context`
-`https://www.w3.org/ns/credentials/v2`, `validFrom`). The app-specific terms
-(`RideAttendanceCredential`, `RideParticipant`, `ride`, `event`) are covered by
-the VC 2.0 context's `@vocab`, so no extra context URL is needed. A strict
-VC-JOSE-COSE 2.0 verifier expects the credential itself as the JWT payload with
-no `vc` wrapper; such a verifier needs to read the `vc` claim to accept these.
+Encoding is the VC-JWT 1.1 shape: the credential sits in a `vc` claim next to `iss`, `sub`, `nbf`, `iat`, `jti`, and the body uses VC 2.0 vocabulary (`@context` `https://www.w3.org/ns/credentials/v2`, `validFrom`). App terms (`RideAttendanceCredential`, `RideParticipant`, `ride`, `event`) fall under the VC 2.0 `@vocab`, so no extra context URL. A strict VC-JOSE-COSE 2.0 verifier expects the credential as the JWT payload with no `vc` wrapper, so it has to read the `vc` claim to accept these.
 
-We deliberately use **VC-JWT** (compact JWT form) over VC-LD with Data Integrity
-proofs because:
-
-- It's smaller (no JSON-LD canonicalisation needed at verification time).
-- It's trivially copy-pasteable as a single string.
-- Every existing JWT verifier can at minimum inspect the structure.
+VC-JWT over VC-LD/Data Integrity: no JSON-LD canonicalisation, one pasteable string, any JWT tool can read it.
 
 ## The deployment's identity (`did:web`)
 
-On first boot, the server generates a fresh Ed25519 keypair and writes the
-private key to a file outside the database (`DEPLOYMENT_KEY_PATH`, default
-`secrets/deployment.key`, or inline via `DEPLOYMENT_KEY`; see `lib/keys.js`),
-so a database backup carries no issuer key. The DID is derived from the
-public URL of the deployment:
+First boot generates an Ed25519 keypair. The private key lives outside the database (`DEPLOYMENT_KEY_PATH`, default `secrets/deployment.key`, or inline `DEPLOYMENT_KEY`; see `lib/keys.js`), so DB backups hold no issuer key. The DID comes from the public URL:
 
 ```
 https://rideshare.example.com   →   did:web:rideshare.example.com
 ```
 
-The DID document is served at `/.well-known/did.json`:
+Served at `/.well-known/did.json`:
 
 ```json
 {
@@ -89,27 +61,18 @@ The DID document is served at `/.well-known/did.json`:
 }
 ```
 
-Every key is a `JsonWebKey2020`: Multikey is the newer form, but didcomm-rust
-(the engine of most DIDComm agents) refuses to parse a DID document containing
-a Multikey method or any service type other than `DIDCommMessaging`, so the
-document carries neither.
-
-Anyone — another deployment, the W3C VC playground, a custom verifier — can
-fetch this document and verify any credential signed by us, with no
-out-of-band trust needed.
+All keys are `JsonWebKey2020`, not the newer Multikey: didcomm-rust (the engine of most DIDComm agents) refuses a DID document with a Multikey method or any service type other than `DIDCommMessaging`.
 
 ## The user's identity (`did:key`)
 
-The user opts in by clicking **Generate did:key** on `/trust`. The browser:
+The user clicks **Generate did:key** on `/trust`. The browser:
 
 1. Calls `crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign","verify"])`.
-2. Exports the public key as raw 32 bytes.
-3. Encodes as `did:key:z` + base58btc(`0xed 0x01` + raw_pubkey).
+2. Exports the raw 32-byte public key.
+3. Encodes `did:key:z` + base58btc(`0xed 0x01` + raw_pubkey).
 4. Stores the `CryptoKeyPair` in IndexedDB (`db: rideshare-trust`, `store: keys`).
 
-To bind the DID to their account on this deployment, the browser executes a
-**challenge-response** so the server can verify the user actually controls the
-private key (not just claims a DID):
+Binding to the account is challenge-response, proving key possession:
 
 ```
 client → POST /trust/bind/challenge          (auth cookie)
@@ -119,25 +82,16 @@ client → POST /trust/bind { did, challenge, signature }
 server → verify Ed25519 signature, persist (user_id → did)
 ```
 
-Without this step, an attacker could sign in to your account and claim
-*your* DID. The signature proves they hold the key.
-
 ## Issuance: one credential per ride participant
 
-Issuance is gated on **dual confirmation**: both parties must tap "I made
-this ride" on the ride detail page after the trip happens. This protects
-against unilateral fabrication of credentials by either side.
+Both parties must tap "I made this ride" after the trip, so neither can fabricate one alone. Then, for the `(accepted_claim, ride)` pair, the server:
 
-When dual confirmation fires for an `(accepted_claim, ride)` pair:
+1. Resolves both users' bound `did:key`.
+2. Builds one credential per side: `credentialSubject.id` = that side's DID, `counterpart` = the other DID, plus ride metadata.
+3. Signs both with the deployment's Ed25519 key.
+4. Stores them in `credentials_issued`; they're downloadable from `/trust`.
 
-1. The server resolves both users' bound `did:key` identifiers.
-2. For each side, it constructs a credential with `credentialSubject.id` =
-   that side's DID, `counterpart` = the other side's DID, and ride metadata.
-3. It signs both credentials with the deployment's Ed25519 private key.
-4. Both credentials are persisted in `credentials_issued` and become
-   downloadable from `/trust`.
-
-Example credential payload (decoded):
+Decoded payload:
 
 ```json
 {
@@ -175,36 +129,27 @@ Example credential payload (decoded):
 }
 ```
 
-The signed JWT is just `base64url(header) . base64url(payload) . base64url(sig)`.
-Pasteable as a single line.
+The signed JWT is `base64url(header) . base64url(payload) . base64url(sig)`, one line.
 
 ## Cross-event verification
 
-When the user lands on a new deployment of this software:
+On a new deployment:
 
-1. They sign in with magic link (per-event allowlist as usual).
-2. They generate (or restore) their `did:key`. **The DID is the same** — it's
-   their key, not the deployment's.
-3. They paste / upload credentials from previous events (or paste the JSON
-   bundle exported from `/trust/credentials.json`).
-4. The new deployment, for each credential:
-   - Refuses if `credentialSubject.id !== <bound DID for this user>` (you can't
-     import someone else's credentials).
-   - Resolves the issuer DID:
-     - `did:key`: trivial (the DID is the key).
-     - `did:web`: HTTPS fetch of `/.well-known/did.json`.
-   - Verifies the EdDSA signature with the resolved public key.
-   - Validates `nbf`/`exp` time bounds.
-   - Persists in `imported_credentials` with `verification_status = 'valid'`.
-5. The trust profile (`/trust`) now shows aggregate counts: total credentials,
-   distinct events (issuer DIDs), distinct counterparts.
-6. Ride cards show a **trust badge** (`✓ N`) for posters with credentials —
-   visible to anyone browsing.
+1. Sign in with a magic link (per-event allowlist as usual).
+2. Generate or restore the `did:key`. It's the same DID, because it's the user's key.
+3. Paste or upload credentials, or the JSON bundle from `/trust/credentials.json`.
+4. For each credential the deployment:
+   - Refuses it if `credentialSubject.id !== <bound DID for this user>`.
+   - Resolves the issuer: `did:key` from the DID itself, `did:web` by HTTPS fetch of `/.well-known/did.json`.
+   - Verifies the EdDSA signature.
+   - Checks `nbf`/`exp`.
+   - Stores it in `imported_credentials` with `verification_status = 'valid'`.
+5. `/trust` shows totals: credentials, distinct events (issuer DIDs), distinct counterparts.
+6. Ride cards show a trust badge (`✓ N`) for posters with credentials, visible to everyone.
 
 ## Verifier playground
 
-`/trust/verify` accepts any VC-JWT and produces a structured verification
-report with reason codes:
+`/trust/verify` takes any VC-JWT and returns a report with reason codes:
 
 ```
 ✓ alg=EdDSA
@@ -214,58 +159,34 @@ report with reason codes:
 ✓ signature_valid
 ```
 
-This works for credentials from **any** deployment of this software, not just
-ours. Useful for debugging cross-event integrations and for technical users
-who want to inspect what they're receiving.
-
 ## Privacy considerations
 
-- The DID is **pseudonymous** by default — it's just an Ed25519 public key.
-  Nothing in the DID itself reveals the user's email, name, or attendance
-  history.
-- Credentials reveal the **counterpart DID** (since both parties consented
-  by confirming the ride). They do NOT reveal the counterpart's email or
-  legal name.
-- The user controls **what** to import to the next event. Selective disclosure
-  v1 = "include credentials A and B but not C." A future v2 could add
-  zero-knowledge proofs (BBS+ signatures or similar) so the user could prove
-  "I have ≥10 credentials from ≥3 events" without revealing which ones.
-- The deployment **cannot forge** a credential without its private key, but
-  it CAN forge a credential between any two DIDs (since it signs unilaterally).
-  A future enhancement is **counter-signed credentials** where the counterpart
-  also signs with their `did:key`, raising the trust assumption from "trust the
-  event" to "trust the event AND the counterpart's claimed signature."
-- Cross-event verification fetches issuer DID documents over HTTPS. To prevent
-  SSRF, only HTTPS URLs are allowed in production (with `localhost` allowed in
-  development for testing).
+- The DID is pseudonymous: an Ed25519 public key, with no email, name or history in it.
+- Credentials reveal the counterpart's DID (both confirmed the ride), not their email or legal name.
+- The user picks which credentials to import ("A and B, not C"). Zero-knowledge proofs (BBS+ or similar) could later prove "≥10 credentials from ≥3 events" without naming them.
+- Nobody can forge a credential without the deployment key, but the deployment itself can issue one between any two DIDs. Counter-signatures (roadmap) fix that.
+- Issuer DID documents are fetched over HTTPS only in production (`localhost` allowed in development) to limit SSRF.
 
 ## Threats and mitigations
 
 | Threat | Mitigation |
 |---|---|
-| User claims someone else's DID | Challenge-response signing proves key ownership before bind |
+| User claims someone else's DID | Challenge-response signature before bind |
 | User imports another user's credentials | Subject DID must match the user's bound DID |
-| Replayed signatures | Challenges are one-time-use, expire in 5 minutes |
-| Issuer key compromise | Generate fresh keypair, re-issue. Old credentials become unverifiable. |
-| SSRF via did:web | Only HTTPS URLs in production; no redirects followed |
-| Malformed JWTs crash the verifier | Verification is wrapped in try/catch with structured error reporting |
-| Tampered credentials | Signature verification per JWT spec; tamper invalidates EdDSA sig |
+| Replayed signatures | Challenges are single-use and expire in 5 minutes |
+| Issuer key compromise | New keypair, re-issue. Old credentials become unverifiable. |
+| SSRF via did:web | HTTPS only in production; no redirects followed |
+| Malformed JWTs crash the verifier | Verification wrapped in try/catch with structured errors |
+| Tampered credentials | Tampering invalidates the EdDSA signature |
 
 ## Roadmap
 
-Things explicitly NOT in v1 but designed to be addable:
-
-1. **Counter-signatures** — counterpart also signs the credential with their
-   `did:key`, eliminating the unilateral-issuance assumption.
-2. **Selective disclosure with BBS+** — prove credential properties without
-   revealing the credential itself.
-3. **Wallet integrations** — present credentials from existing DID wallets
-   (Spruce, Veres, etc.) instead of only this app's IndexedDB store.
-4. **DIDComm presentation** — invitation/connection over standard DIDComm so
-   users can present credentials without manual paste.
-5. **Status lists** — VC StatusList 2021 entries so credentials can be revoked.
-6. **Trust frameworks** — let event organizers configure which other
-   deployments' credentials count, with weights or thresholds.
+1. Counter-signatures: the counterpart also signs with their `did:key`, removing unilateral issuance.
+2. Selective disclosure with BBS+: prove properties without revealing the credential.
+3. Wallet integrations: present from existing DID wallets (Spruce, Veres, etc.), not only this app's IndexedDB store.
+4. DIDComm presentation: present credentials over DIDComm instead of pasting.
+5. Status lists: VC StatusList 2021 entries for revocation.
+6. Trust frameworks: organizers choose which other deployments' credentials count, with weights or thresholds.
 
 ## Implementation files
 
@@ -278,16 +199,11 @@ Things explicitly NOT in v1 but designed to be addable:
 | `routes/trust.js` | `/trust`, bind/import endpoints, verifier playground |
 | `public/trust.js` | Browser DID:key gen, IndexedDB, signing, import UI |
 
-All of it is plain JavaScript on Node's built-in `crypto` and the browser's
-WebCrypto. No external libraries.
+No external libraries: Node `crypto` and browser WebCrypto only.
 
 ## Selective disclosure (SD-JWT VC)
 
-Every ride credential is issued twice: the VC-JWT above, and an SD-JWT VC
-(`typ: dc+sd-jwt`) signed with the deployment's ES256 key (`#key-2` in the DID
-document, also published at `/.well-known/jwt-vc-issuer`). The SD-JWT VC names
-the HTTPS origin as `iss`, as SD-JWT VC requires for metadata-based key
-resolution, and binds to the holder's `did:key` through `cnf.jwk`.
+Each ride credential is issued twice: the VC-JWT above and an SD-JWT VC (`typ: dc+sd-jwt`) signed with the deployment's ES256 key (`#key-2` in the DID document, also published at `/.well-known/jwt-vc-issuer`). The SD-JWT VC uses the HTTPS origin as `iss`, as SD-JWT VC requires for metadata-based key resolution, and binds to the holder's `did:key` via `cnf.jwk`.
 
 | Claim | Disclosure |
 |---|---|
@@ -296,79 +212,64 @@ resolution, and binds to the holder's `did:key` through `cnf.jwk`.
 | `ride.date`, `ride.time`, `ride.airport`, `ride.direction` | Each selectively disclosable |
 | `event.name`, `event.startDate`, `event.endDate` | Each selectively disclosable |
 
-Two decoy digests are added at the top level. The holder presents from `/trust`:
-the browser keeps the chosen disclosures and signs a `kb+jwt` (`alg: Ed25519`)
-over `iat`, `aud`, a verifier `nonce` and `sd_hash`. The playground verifier
-issues the nonce (`POST /trust/verify/nonce`), consumes it once, and resolves a
-foreign issuer's key through its `/.well-known/jwt-vc-issuer` metadata.
+Two decoy digests sit at the top level. The holder presents from `/trust`: the browser keeps the chosen disclosures and signs a `kb+jwt` (`alg: Ed25519`) over `iat`, `aud`, a verifier `nonce` and `sd_hash`. The playground verifier issues the nonce (`POST /trust/verify/nonce`), consumes it once, and resolves a foreign issuer's key from its `/.well-known/jwt-vc-issuer` metadata.
 
-Implementation: `lib/jose.js` (JWS, JWK), `lib/sd-jwt.js` (RFC 9901),
-`lib/verifier.js` (nonces, issuer keys), `issueRideSdJwt()` in `lib/trust.js`.
+Code: `lib/jose.js` (JWS, JWK), `lib/sd-jwt.js` (RFC 9901), `lib/verifier.js` (nonces, issuer keys), `issueRideSdJwt()` in `lib/trust.js`.
 
 ## Issuance to wallets (OpenID4VCI)
 
-`lib/oid4vci.js` and `routes/oid4vci.js` implement OpenID4VCI 1.0's
-pre-authorized code flow. The credential issuer is its own authorization
-server and accepts token requests without a client id.
+`lib/oid4vci.js` and `routes/oid4vci.js` implement the OpenID4VCI 1.0 pre-authorized code flow. The issuer is its own authorization server and takes token requests without a client id.
 
 | Step | Endpoint | Rule |
 |---|---|---|
-| Offer | `POST /trust/oid4vci/offer` (attendee, cookie) | Creates a 10-minute offer for one of the attendee's credentials, shows `openid-credential-offer://?credential_offer_uri=…` as a QR code and a 6-digit PIN rendered once; only hashes of the code and PIN grant access |
-| Offer object | `GET /oid4vci/offer/:id` | Returns `credential_issuer`, `credential_configuration_ids`, and the pre-authorized grant with `tx_code` (numeric, length 6) until redeemed |
-| Token | `POST /oid4vci/token` | Pre-authorized code + PIN → 10-minute Bearer token; the code is single-use, five wrong PINs burn it, rate-limited per IP |
+| Offer | `POST /trust/oid4vci/offer` (attendee, cookie) | 10-minute offer for one of the attendee's credentials, shown as a QR of `openid-credential-offer://?credential_offer_uri=…` plus a 6-digit PIN rendered once; only hashes of code and PIN are stored |
+| Offer object | `GET /oid4vci/offer/:id` | `credential_issuer`, `credential_configuration_ids`, and the pre-authorized grant with `tx_code` (numeric, length 6) until redeemed |
+| Token | `POST /oid4vci/token` | Code + PIN → 10-minute Bearer token; code is single-use, five wrong PINs burn it, rate-limited per IP |
 | Nonce | `POST /oid4vci/nonce` | `c_nonce`, single-use, five minutes |
-| Credential | `POST /oid4vci/credential` | `credential_configuration_id` + `proofs.jwt[1]`; the proof's `typ` must be `openid4vci-proof+jwt`, with exactly one of `jwk`/`kid` (`did:key` only), `aud` = the issuer URL, `iat` within five minutes and a live nonce. Returns `{credentials:[{credential}]}` with an SD-JWT VC bound to the proof key; the token is single-use |
+| Credential | `POST /oid4vci/credential` | `credential_configuration_id` + `proofs.jwt[1]`; proof `typ` must be `openid4vci-proof+jwt`, exactly one of `jwk`/`kid` (`did:key` only), `aud` = issuer URL, `iat` within five minutes, live nonce. Returns `{credentials:[{credential}]}` with an SD-JWT VC bound to the proof key; token is single-use |
 
 ## Presentation to a verifier (OpenID4VP)
 
-`lib/oid4vp.js` and `routes/oid4vp.js` make each deployment an OpenID4VP 1.0
-verifier.
+`lib/oid4vp.js` and `routes/oid4vp.js` make each deployment an OpenID4VP 1.0 verifier.
 
 | Step | Endpoint | Rule |
 |---|---|---|
 | Request | `POST /verify/request` | 10-minute request with fresh `state` and `nonce`; QR of `openid4vp://?client_id=decentralized_identifier:<did>&request_uri=…` |
 | Request object | `GET /oid4vp/request/:id` | `application/oauth-authz-req+jwt`, header `typ: oauth-authz-req+jwt`, `alg: ES256`, `kid: <did>#key-2`; payload `client_id`, `response_type: vp_token`, `response_mode: direct_post`, `response_uri`, `nonce`, `state`, `dcql_query`, `client_metadata.vp_formats_supported`; gone once answered or expired |
-| Response | `POST /oid4vp/response` | `vp_token` must map the DCQL credential id to one SD-JWT VC presentation; KB-JWT `aud` = the full prefixed client id, `nonce` = the request's; `vct` must be this deployment's; settles once, on success only, so junk posted with a leaked `state` cannot void the request |
-| Status | `GET /oid4vp/status/:token` | A separate random token rendered only on the verifier page (the request id in the QR does not unlock it); returns the verified claims, or the latest failed attempt while still pending |
-| In-app holder | `POST /trust/oid4vp/inspect` | Fetches a request (locally, or via `safe-fetch`), checks `typ`, that `kid` belongs to the client id's DID, and the signature against that DID's `assertionMethod` key; the browser then signs and posts only the requested claims |
+| Response | `POST /oid4vp/response` | `vp_token` must map the DCQL credential id to one SD-JWT VC presentation; KB-JWT `aud` = full prefixed client id, `nonce` = the request's; `vct` must be this deployment's; settles once, on success only, so junk posted with a leaked `state` can't void the request |
+| Status | `GET /oid4vp/status/:token` | Separate random token rendered only on the verifier page (the request id in the QR doesn't unlock it); returns verified claims, or the latest failed attempt while pending |
+| In-app holder | `POST /trust/oid4vp/inspect` | Fetches a request (locally or via `safe-fetch`), checks `typ`, that `kid` belongs to the client id's DID, and the signature against that DID's `assertionMethod` key; the browser then signs and posts only the requested claims |
 
 ## DIDComm between deployments
 
-`lib/didcomm-crypto.js` implements the DIDComm v2.1 envelopes on node:crypto
-alone; `lib/didcomm.js` and `routes/didcomm.js` make each deployment's did:web
-an agent.
+`lib/didcomm-crypto.js` implements DIDComm v2.1 envelopes on node:crypto alone; `lib/didcomm.js` and `routes/didcomm.js` make each deployment's did:web an agent.
 
 | Piece | Detail |
 |---|---|
 | Keys | X25519 `#key-x25519-1` in `keyAgreement` (`lib/keys.js` `loadX25519Key()`, `${DEPLOYMENT_KEY_PATH}.x25519`) |
 | Endpoint | `DIDCommMessaging` service → `POST /didcomm`, `application/didcomm-encrypted+json`, 202 on acceptance, 64 KB cap, rate-limited per IP |
-| Envelopes | Authcrypt `ECDH-1PU+A256KW` + `A256CBC-HS512` (outbound always); anoncrypt `ECDH-ES+A256KW` + `A256CBC-HS512` accepted. `A256GCM` and `XC20P` are refused: optional in the spec, and Node has no XChaCha20 |
+| Envelopes | Authcrypt `ECDH-1PU+A256KW` + `A256CBC-HS512` (always outbound); anoncrypt `ECDH-ES+A256KW` + `A256CBC-HS512` accepted. `A256GCM` and `XC20P` refused: optional in the spec, and Node has no XChaCha20 |
 | Protocols | Trust Ping 2.0 (answers `ping` with `ping-response` on the same thread); Discover Features 2.0 (discloses both protocols) |
-| Replies | Only to authcrypt senders, to the endpoint their own DID document declares, through `lib/safe-fetch.js`, rate-limited per sender |
-| UI | `/trust/didcomm`: ping or query any `did:web` agent, and see the message log |
+| Replies | Only to authcrypt senders, at the endpoint their own DID document declares, through `lib/safe-fetch.js`, rate-limited per sender |
+| UI | `/trust/didcomm`: ping or query any `did:web` agent and see the message log |
 
-Verified against the spec's `ENCRYPTED_MSG_AUTH_X25519` vector
-(`tests/vectors/didcomm-authcrypt-x25519.json`) and against didcomm-rust, the
-engine of @writerslogic/didcomm-ts: envelope packing in both directions and
-both modes (`tests/interop/didcomm-rust.mjs`), and a full agent round trip in
-which a didcomm-rust agent with its own did:web pings a running deployment
-over HTTP and authenticates the reply (`tests/interop/didcomm-rust-agent.mjs`).
+Tested against the spec's `ENCRYPTED_MSG_AUTH_X25519` vector (`tests/vectors/didcomm-authcrypt-x25519.json`) and against didcomm-rust, the engine of @writerslogic/didcomm-ts:
+
+- envelope packing in both directions and both modes (`tests/interop/didcomm-rust.mjs`);
+- a full round trip where a didcomm-rust agent with its own did:web pings a running deployment over HTTP and authenticates the reply (`tests/interop/didcomm-rust-agent.mjs`).
 
 ## Spec versions and interoperability decisions
 
-Verified against primary sources on 2026-10-08. These decide how the
-selective-disclosure, OpenID4VC and DIDComm work is built.
+Checked against primary sources on 2026-10-08.
 
 | Spec | Version | Consequence here |
 |---|---|---|
 | SD-JWT | RFC 9901 (Nov 2025) | Disclosures, `_sd`, KB-JWT (`typ: kb+jwt`, `sd_hash` over the presentation including its trailing `~`) |
-| SD-JWT VC | draft-ietf-oauth-sd-jwt-vc-19 | `typ: dc+sd-jwt`; `vct` required; `iss`, `nbf`, `exp`, `cnf`, `vct`, `status` never disclosable. Issuer keys resolve through `/.well-known/jwt-vc-issuer` or `x5c`; the draft defines no DID mechanism, so SD-JWT VCs name the HTTPS origin as `iss` and the same keys are also in the DID document |
+| SD-JWT VC | draft-ietf-oauth-sd-jwt-vc-19 | `typ: dc+sd-jwt`; `vct` required; `iss`, `nbf`, `exp`, `cnf`, `vct`, `status` never disclosable. Issuer keys resolve through `/.well-known/jwt-vc-issuer` or `x5c`; the draft has no DID mechanism, so SD-JWT VCs use the HTTPS origin as `iss` and the same keys are also in the DID document |
 | OpenID4VCI | 1.0 Final (Sep 2025) | Issuer identifier is the HTTPS origin; pre-authorized code flow; nonce endpoint (no `c_nonce` in the token response); `proofs.jwt[]` with `typ: openid4vci-proof+jwt`; format `dc+sd-jwt` |
 | OpenID4VP | 1.0 Final (Jul 2025) | DCQL only (Presentation Exchange was removed); `vp_token` keyed by credential query id; KB-JWT `aud` is the full prefixed `client_id` |
 | HAIP | 1.0 Final (Dec 2025) | Requires X.509 issuer chains, wallet-attestation client auth, DPoP and the authorization-code flow, and never mentions DIDs. **This app does not claim HAIP conformance**; it targets plain OpenID4VCI/OpenID4VP with ES256 |
-| DIDComm Messaging | v2.1 (WG approved 2023-04) | Server-to-server between deployments: authcrypt `ECDH-1PU+A256KW` with `A256CBC-HS512` over X25519, anoncrypt `ECDH-ES+A256KW`, Trust Ping 2.0 and Discover Features 2.0 |
-| JOSE algorithm names | IANA registry, RFC 9864 | `EdDSA` is deprecated in favour of `Ed25519`; new tokens say `Ed25519`, both are accepted |
+| DIDComm Messaging | v2.1 (WG approved 2023-04) | Server-to-server: authcrypt `ECDH-1PU+A256KW` with `A256CBC-HS512` over X25519, anoncrypt `ECDH-ES+A256KW`, Trust Ping 2.0, Discover Features 2.0 |
+| JOSE algorithm names | IANA registry, RFC 9864 | `EdDSA` is deprecated in favour of `Ed25519`; new tokens say `Ed25519`, both accepted |
 
-ES256 (P-256) is the SD-JWT VC and OpenID4VC signing algorithm because every
-OpenID4VC wallet profile requires it; the Ed25519 key keeps signing VC-JWTs.
-The second key is `lib/keys.js` `loadEs256Key()`.
+ES256 (P-256) signs SD-JWT VCs and OpenID4VC because every OpenID4VC wallet profile requires it. The Ed25519 key still signs VC-JWTs. The ES256 key is `lib/keys.js` `loadEs256Key()`.

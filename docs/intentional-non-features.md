@@ -1,166 +1,65 @@
 # Intentional non-features
 
-> Things **rideshare** deliberately does not build, and the security or scope reasoning. Audience: anyone proposing "what if we added…" or evaluating whether the project meets their needs.
-
-A non-feature is not a TODO. These are decisions, not gaps. Reopening any of them requires an RFC issue and a meaningful change in the threat model or operating context.
-
----
+What rideshare deliberately doesn't build, and why. These are decisions, not TODOs. Reopening one needs an RFC issue and a real change in the threat model or operating context.
 
 ## No native mobile app
 
-**Why not:** a responsive, server-rendered web page is sufficient for the use case. Adding a native app would add:
-
-- App-store review surface (unrelated organisations approving our security model).
-- Two more codebases (iOS, Android), each with its own attack surface.
-- Push notifications, which require a third-party service that observes user activity.
-- A signing-key management story for app distribution that is non-trivial.
-
-**The web page gives us:** it works on any phone browser with nothing to install, it can be added to a home screen, and every update ships on the next page load. There is no service worker or offline cache. The browser asks for location only when you tap "Share my location" on the map. Sufficient for an event.
-
----
+Two more codebases, app-store review, a distribution signing key, and push notifications via a third party that sees user activity. The responsive web page works on any phone with nothing to install, can go on the home screen, and updates on next load. No service worker or offline cache; location is requested only when you tap "Share my location".
 
 ## No real-time chat
 
-**Why not:** out of scope. Chat is a different product with its own threat model (group key management, message persistence, moderation tooling).
-
-Attendees coordinate via the channels they already have: Signal, Matrix, the event's official chat. We surface attendee contact info on a confirmed ride; the actual conversation happens elsewhere.
-
-This also avoids the legal exposure of operating a chat service (CSAM scanning, lawful intercept requests, content moderation).
-
----
+A different product with its own threat model (group keys, persistence, moderation) and legal exposure (CSAM scanning, lawful intercept). A confirmed ride shows contact info; people talk on Signal, Matrix or the event's chat.
 
 ## No cost-splitting payments
 
-**Why not:** payment processing brings:
-
-- PCI scope, even when offloaded to Stripe (the integration code is in scope).
-- KYC/AML obligations in some jurisdictions if we hold funds.
-- Chargeback handling and customer service.
-- A whole new class of financial-fraud attacks against the app.
-- Tax reporting in some jurisdictions for facilitated payments.
-
-The complexity is wildly disproportionate to the value. Drivers and riders settle externally (Venmo, cash, "I owe you a beer"). The app surfaces who-owes-whom if asked, but does not move money.
-
----
+PCI scope (even with Stripe), possible KYC/AML and tax reporting, chargebacks, and a new class of fraud. Way out of proportion to the value. People settle up with Venmo or cash; the app can show who owes whom but never moves money.
 
 ## No driver verification beyond cross-event trust
 
-**Why not:** the cross-event Verifiable Credential model already provides "this person attended event X under DID Y." Going further (background checks, license verification, insurance proof) means:
-
-- Becoming a regulated entity in many jurisdictions.
-- Storing copies of government IDs (a high-value target).
-- Making promises we cannot keep ("verified safe driver" — we can't promise that).
-
-The cross-event credential model gives attendees something concrete to evaluate — the person showed up at IIW XX, they're a known quantity in the community — without us pretending to do background checks we can't verify.
-
----
+Credentials already say "this person attended event X under DID Y". License checks, insurance proof or background checks would make us a regulated entity, mean storing government IDs, and imply a "verified safe driver" promise we can't keep.
 
 ## No background checks
 
-**Why not:** see above. Also:
-
-- Background checks are jurisdiction-specific and the result varies wildly in meaning.
-- A clean check is not a guarantee; an unclean check may reflect injustice rather than risk.
-- Storing the result creates discrimination exposure.
-
-If your event needs background checks, run them outside the app, encode the result as "this attendee was approved by the organising committee," and grant them a credential of that type.
-
----
+Results are jurisdiction-specific, a clean check guarantees nothing, an unclean one may reflect injustice, and storing them invites discrimination claims. If your event needs them, run them outside the app and issue an "approved by the organising committee" credential.
 
 ## No insurance products
 
-**Why not:** insurance is a regulated product. Selling, brokering, or even loosely facilitating it brings licensing requirements, ongoing reporting, capital reserves (for some jurisdictions), and a class of commercial counterparty risk we have no business handling.
-
-A commercial ride-sharing service has insurance because they are providing the ride as a service. We are facilitating peer coordination among attendees of an event the attendees chose to come to. The legal frame is closer to a community Slack channel than to Uber.
-
-If your event wants to provide insurance to ride-sharers, run that as a separate program.
-
----
+Regulated: licensing, reporting, sometimes capital reserves. We facilitate peer coordination at an event, closer to a community Slack channel than to Uber. Run any insurance as a separate program.
 
 ## No user-uploaded media
 
-**Why not:**
-
-- Image uploads bring an entire EXIF-stripping, malware-scanning, content-moderation pipeline.
-- Video uploads bring an order of magnitude more.
-- Storage means cost, retention policy, deletion guarantees, GDPR/erasure handling.
-- Misuse cases (harassment imagery, NSFW) we do not want to be in the business of moderating.
-
-The one exception is the deployment logo (admin-only, sanitised SVG, see [`docs/security/xss.md`](security/xss.md)). That's the only file an attacker-controlled-or-influenced party can upload, and it is heavily constrained.
-
----
+Uploads mean EXIF stripping, malware scanning, moderation, storage costs, retention and erasure handling. The only upload is the admin-only deployment logo, as sanitised SVG (see [`docs/security/xss.md`](security/xss.md)).
 
 ## No analytics or telemetry
 
-**Why not:** the audience is security-conscious; running third-party analytics (Google, Plausible, even self-hosted Matomo with default cookies) signals we don't take their privacy seriously.
-
-What we do instead:
-
-- Aggregate counters in the audit log (rides created today, magic links sent today). Visible at `/admin/insights`.
-- No per-user behaviour tracking. We don't know that user 42 looked at three rides before claiming one.
-- No third-party JavaScript on any page.
-
-This is also a CSP simplification: `default-src 'self'` is easy to maintain when there is nothing external.
-
----
+No third-party JavaScript, no per-user behaviour tracking. Aggregate counters from the audit log (rides created today, magic links sent today) are at `/admin/insights`. Keeps CSP at a simple `default-src 'self'`.
 
 ## No federated identity (OAuth, OIDC, SSO)
 
-**Why not:** OIDC against a third-party provider (Google, GitHub, your-corporate-IDP) means:
-
-- The provider learns which event you attended.
-- The provider can lock you out by suspending your account.
-- We become a target for OAuth-misimplementation attacks.
-
-The magic-link flow is conceptually similar (we send a link to your email, you prove you control the inbox) but the dependency is just SMTP, not a stateful relationship with an identity provider. And the trust portability story (`did:key`, Verifiable Credentials) gives the cross-event identity continuity that SSO would otherwise provide.
-
-A future feature might allow signing in via a held credential — that's federation against ourselves and other deployments, not against a third-party IDP.
-
----
+A third-party IdP would learn which event you attended, could lock you out, and adds OAuth misimplementation risk. Magic links depend only on SMTP, and `did:key` plus Verifiable Credentials give cross-event continuity. Signing in with a held credential may come later (federation among deployments, not with an IdP).
 
 ## No "remember me forever" sessions
 
-**Why not:** sessions are 30 days max, cookie is `Session` (browser-bounded) by default; "remember me" extends to 30 days but no further. After that, sign in again.
-
-Long sessions amplify the impact of cookie theft. For an event lifetime (typically 3-7 days) the default is well-suited.
-
----
+Cookie is `Session` (browser-bounded) by default; "remember me" extends to 30 days max. Long sessions amplify cookie theft, and events last 3-7 days.
 
 ## No SMS or phone-call verification
 
-**Why not:**
-
-- SIM swapping is a real and accessible attack.
-- Telco interception in some jurisdictions is trivial.
-- Cost per message at scale.
-- Globally, phone numbers are PII and storing them carries obligations.
-
-Email is not perfect but the threat model is well-understood. Attendees who want a stronger second factor can bind a `did:key` with a hardware-backed key (WebAuthn-derived, not currently shipped but planned for v0.5).
-
----
+SIM swapping, easy telco interception in some places, per-message cost, and phone numbers are PII. Email's threat model is well understood. A hardware-backed `did:key` (WebAuthn-derived) as a second factor is planned for v0.5, not shipped.
 
 ## No driver background photo / ID verification
 
-See "No background checks" and "No user-uploaded media." Same reasoning, doubled.
-
----
+Same reasons as no background checks and no uploaded media.
 
 ## No location history or background tracking
 
-Live location exists, but narrowly: you opt in on the map, only your matched ride partners see it, and the server keeps your latest point in memory for two minutes. No trail is stored. Web pages can't track location in the background, and we wouldn't if they could. Once you've met, use Signal, Find My or Google Maps if you want more.
-
----
+Live location is opt-in on the map and visible only to your matched ride partners. The server keeps just your latest point, in memory, for two minutes; no trail is stored. Web pages can't track in the background, and we wouldn't if they could. Once you've met, use Signal, Find My or Google Maps.
 
 ## No automatic ride matching
 
-**Why not:** an algorithmic matcher is a recommendation system, with all the complexity that implies (preference modeling, fairness considerations, abuse via gaming the algorithm). Plus it would need to read every attendee's location and time to compute matches — a reach that's hard to justify for the marginal utility over "browse the open rides list."
-
-The list-based UI scales to the size of an event (typically <500 active rides at peak).
-
----
+A matcher is a recommendation system (preference modelling, fairness, gaming) and would need every attendee's location and times. Browsing the open rides list works at event scale (typically <500 active rides at peak).
 
 ## See also
 
-- [`SECURITY.md`](../SECURITY.md) — disclosure and policy.
-- [`THREAT_MODEL.md`](../THREAT_MODEL.md) — what we *do* defend against.
-- [`CONTRIBUTING.md`](../CONTRIBUTING.md) — the RFC process for proposing reversal of any of these.
+- [`SECURITY.md`](../SECURITY.md): disclosure and policy.
+- [`THREAT_MODEL.md`](../THREAT_MODEL.md): what we do defend against.
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md): the RFC process for reversing any of these.

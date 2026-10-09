@@ -1,179 +1,107 @@
 # Security model
 
-This document describes the threats this app defends against, the mitigations
-in place, and the limits of those mitigations. Read it before deploying for
-a real event.
+Read before deploying for a real event.
 
 ## What we protect
 
-The most sensitive asset is the **attendee list** — the set of email
-addresses of registered event attendees. Conference attendee lists are
-valuable to spammers, phishers, recruiters, and competitors, and leaks
-embarrass the event.
-
-The next most sensitive asset is **per-user contact information** that
-people opt into sharing only after a ride match (Signal, phone, social
-handle, etc.).
-
-After that, **ride metadata** (who's traveling when, from where) — useful
-to a stalker, less so to a generic attacker.
+1. **Attendee list** (email addresses), valuable to spammers, phishers, recruiters.
+2. **Contact info** shared after a ride match (Signal, phone, social handle).
+3. **Ride metadata** (who travels when, from where).
 
 ## Threats and mitigations
 
 ### T1. Stolen DB file leaks the attendee list
 
-The `data/app.db` file might be stolen via host compromise, accidental
-public S3 bucket, leaked backup, etc.
+Via host compromise, a public bucket, a leaked backup.
 
-**Mitigation:**
-- Attendee emails are stored as `HMAC-SHA256(normalize(email), ALLOWLIST_SALT)`,
-  never in plaintext.
-- The salt is a per-deployment secret kept in env vars, *not* in the DB.
-- Without the salt, the hashes are useless for anything except offline
-  brute-forcing against a candidate email list — which is far less useful
-  than a plaintext dump.
-- Rotating the salt invalidates all hashes; admin must re-import the CSV.
+- Emails stored as `HMAC-SHA256(normalize(email), ALLOWLIST_SALT)`, never plaintext.
+- The salt is an env var, not in the DB; without it, only offline brute force against a candidate list works.
+- Rotating the salt invalidates all hashes; admin re-imports the CSV.
 
-**Limit:** an attacker who steals **both** the DB and the env file (i.e.
-who has full host access) can re-derive hashes for any candidate email.
-Defence is at the host level: encrypted volumes, restricted host access.
+**Limit:** DB plus env file (full host access) lets an attacker hash any candidate. Harden the host.
 
 ### T2. Allowlist enumeration via the sign-in form
 
-An attacker probes `/auth/send` with thousands of emails to learn who is
-registered.
+Probing `/auth/send` to learn who's registered.
 
-**Mitigation:**
-- Identical HTTP response and rendered page regardless of whether the email
-  is on the list or not.
-- `startMagicLink` does an artificial delay on the off-list path to mask
-  the difference in CPU work.
-- Per-email rate limit: max `MAGIC_LINK_RATE_LIMIT` (default 5) sends per
-  email per hour.
-- Per-IP rate limit: 30 sends per IP per hour.
-- No endpoint anywhere returns the contents of the allowlist.
+- Same response whether or not the email is listed.
+- `startMagicLink` adds an artificial delay on the off-list path.
+- `MAGIC_LINK_RATE_LIMIT` (default 5) per email per hour; 30 per IP per hour.
+- No endpoint returns the allowlist.
 
-**Limit:** a sophisticated attacker with many IPs can still probe slowly.
-At 30 emails/hour/IP and (say) 100 IPs, they could learn ~72k addresses/day.
-For a typical event allowlist of <2k addresses, this is non-trivial but not
-impossible. Defence in depth: deploy behind Cloudflare or a similar WAF and
-enforce stronger limits there.
+**Limit:** 100 IPs at 30/hour probe ~72k addresses/day, against lists usually under 2k. Put Cloudflare or a similar WAF in front with stricter limits.
 
 ### T3. Allowlist enumeration via the admin "check" tool
 
-A compromised admin account checks every email in a wordlist via
-`/admin/allowlist/check`.
+A compromised admin runs a wordlist through `/admin/allowlist/check`.
 
-**Mitigation:**
-- Per-admin rate limit (30 checks per admin per hour).
-- Every check is written to the audit log with timestamp, admin email, and
-  IP. Other admins can spot abuse.
+- 30 checks per admin per hour.
+- Each check is audit-logged (timestamp, admin email, IP).
 
 ### T4. Stolen session cookie
 
-If a user's session cookie is exfiltrated (XSS, MITM, malware), the attacker
-can act as them.
+From XSS, MITM or malware.
 
-**Mitigation:**
-- Sessions are opaque random tokens (32 bytes from `crypto.randomBytes`),
-  stored server-side. Compromised cookies are revoked instantly by deleting
-  the row.
-- Cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` when `APP_URL`
-  is `https://`.
-- Strict CSP (no inline scripts except style; no third-party origins).
-- Auto-escaping HTML templates (XSS-safe by default).
-- 14-day default session lifetime; configurable.
+- Opaque 32-byte tokens (`crypto.randomBytes`) stored server-side; delete the row to revoke.
+- `HttpOnly`, `SameSite=Lax`, and `Secure` when `APP_URL` is `https://`.
+- Strict CSP (no inline scripts except style; no third-party origins) and auto-escaping templates.
+- 14-day default lifetime, configurable.
 
 ### T5. Magic-link interception
 
-Tokens travel in URL query strings, which appear in browser history, server
-logs, and Referer headers.
+Query-string tokens land in history, logs and Referer headers.
 
-**Mitigation:**
-- Tokens are random (256 bits), one-time-use, and expire after 15 minutes.
-- The DB stores the HMAC of the token, not the token itself, so log access
-  alone doesn't yield a valid token.
-- `Referrer-Policy: same-origin` reduces leaks via cross-origin Referer.
+- 256-bit random, single-use, 15-minute expiry.
+- DB stores the token's HMAC, so log access alone yields nothing.
+- `Referrer-Policy: same-origin`.
 
-**Limit:** an attacker with access to the user's browser history within the
-15-minute window before first use can sign in. The user closing the email
-tab promptly mitigates this.
+**Limit:** browser-history access within 15 minutes, before first use, allows sign-in.
 
 ### T6. CSRF
 
-Cross-site request forgery against the state-changing POST endpoints
-(`/rides/new`, `/claims/:id/accept`, etc.).
+Forged POSTs (`/rides/new`, `/claims/:id/accept`, etc.).
 
-**Mitigation:**
-- `SameSite=Lax` session cookie blocks cross-origin POSTs initiated by
-  third-party sites in modern browsers.
+- `SameSite=Lax` session cookie blocks cross-origin POSTs in modern browsers.
 - `Content-Security-Policy: frame-ancestors 'none'` blocks framing.
 - `Permissions-Policy` denies camera, microphone and other powerful features. Geolocation and screen wake lock are allowed for this origin only, for opt-in live location.
 
-**Limit:** SameSite=Lax is the primary defence. Browsers ≥10 years old
-that don't enforce SameSite are vulnerable to classic CSRF. Acceptable
-trade-off for an event in 2026.
+**Limit:** SameSite=Lax is the main defense; browsers 10+ years old that ignore it are exposed. Acceptable for a 2026 event. See [`docs/security/csrf.md`](docs/security/csrf.md).
 
 ### T7. Server-side request injection / SSRF
 
-The app does not make outbound requests based on user input, except to
-the Resend API endpoint which is hard-coded.
+No outbound requests built from user input, except the hard-coded Resend API endpoint.
 
 ### T8. Mass account takeover via rate-limit bypass
 
-The in-memory rate limiter resets on process restart.
+The in-memory limiter resets on restart. Windows are 1 hour, so one restart doesn't enable enumeration at scale.
 
-**Mitigation:** rate-limit windows are 1 hour; a single restart cycle
-won't help an attacker enumerate at scale.
-
-**Limit:** if you're running on a platform that auto-restarts on every
-deploy and you're being actively attacked, consider a DB-backed limiter
-(swap in `lib/rate-limit.js`).
+**Limit:** on a platform that restarts every deploy, under active attack, swap in a DB-backed limiter (`lib/rate-limit.js`).
 
 ### T9. Insecure transport
 
-If `APP_URL` is `http://` (e.g. local dev), session cookies are sent
-without `Secure`.
-
-**Mitigation:** in production, always set `APP_URL` to `https://`. Set
-`TRUST_PROXY=true` so the app correctly identifies HTTPS when behind a
-TLS-terminating proxy.
+An `http://` `APP_URL` (local dev) drops `Secure` from cookies. In production use `https://`, and `TRUST_PROXY=true` behind a TLS-terminating proxy.
 
 ### T10. Privacy regression via insights
 
-Aggregate metrics could leak individual identities if a bucket is small
-enough (e.g. "1 person flew SFO→venue at 3:14am Tuesday").
+Small buckets identify people ("1 person flew SFO→venue at 3:14am Tuesday").
 
-**Mitigation:**
-- The insights aggregator coalesces buckets with fewer than 5 entries into
-  "Other" (k-anonymity heuristic).
-- No per-user views exist anywhere in the admin UI. The audit log has
-  per-actor records but only for state-changing actions, not browsing.
+- Buckets under 5 entries merge into "Other" (k-anonymity heuristic).
+- No per-user admin views. The audit log records actors for state changes only, not browsing.
 
 ## Deployment hygiene
 
-- **Strong secrets.** Generate `SESSION_SECRET` and `ALLOWLIST_SALT` with
-  `openssl rand -hex 32`. Don't reuse across events.
-- **Encrypted storage.** Run on a host with disk encryption at rest.
-  Railway, Render, and Fly volumes are encrypted by default.
-- **Backup hygiene.** SQLite backups contain the same hashes as the live
-  DB — protect them the same way. Don't push backups to public buckets.
-- **Limited admin access.** Keep `ADMIN_EMAILS` to the minimum set of
-  organizers who actually need it.
-- **Wipe after the event.** Either click "Wipe attendee data" in admin, or
-  destroy the deployment + volume. The default
-  `SESSION_LIFETIME_DAYS=14` means stale sessions expire on their own.
+- Generate `SESSION_SECRET` and `ALLOWLIST_SALT` with `openssl rand -hex 32`, fresh per event.
+- Encrypt disks at rest. Railway, Render and Fly volumes are encrypted by default.
+- Protect backups like the live DB.
+- Keep `ADMIN_EMAILS` minimal.
+- After the event: "Wipe attendee data" in admin, or destroy the deployment and volume. `SESSION_LIFETIME_DAYS=14` expires stale sessions.
 
 ## What we don't claim
 
-- This is **not** SOC2-audited or pen-tested by a third party. It's a
-  small, auditable codebase (~2000 lines) that you can read end-to-end.
-- It does **not** defend against a compromised admin account (other than
-  the audit log telling you what they did).
-- It does **not** defend against a compromised host (root on the server).
-- It is **not** designed for multi-tenancy or extreme scale.
+- No SOC2 audit or third-party pen test. The codebase is small (~2000 lines) and readable end to end.
+- No defense against a compromised admin beyond the audit log, or a compromised host (root).
+- Not built for multi-tenancy or extreme scale.
 
 ## Reporting issues
 
-Email `supportEmail` from your `event.config.json`, or open an issue with
-the prefix `security:` in your fork's tracker.
+Email the `supportEmail` in your `event.config.yaml`, or open an issue prefixed `security:` in your fork's tracker.

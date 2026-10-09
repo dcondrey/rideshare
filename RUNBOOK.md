@@ -1,12 +1,8 @@
 # Runbook
 
-> Operational playbook for an operator deploying the **rideshare** webapp at an event. Audience: the human running the deployment, before, during, and after the event.
+Running **rideshare** at an event. For security incidents also read [`SECURITY.md`](SECURITY.md) and [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
-This is a *short-lived* deployment by design. The runbook reflects that — first-time setup is heavy, day-to-day operation is light, and the post-event wipe is mandatory.
-
-If you are responding to a security incident, also read [`SECURITY.md`](SECURITY.md) and [`THREAT_MODEL.md`](THREAT_MODEL.md).
-
-**Single-instance only.** SQLite plus the in-memory rate limiter mean this app cannot run as more than one replica (see [Limitations in the README](README.md#limitations)). Don't put it behind a load balancer fanning out to multiple containers/dynos/instances — a second instance gets its own empty rate-limit table and, if it isn't pointed at the exact same SQLite file, its own empty database. One instance is enough for event scale (a few thousand users); this is a constraint to plan around, not a bug to work around.
+**Single instance only** (SQLite plus in-memory rate limiter; see [Limitations in the README](README.md#limitations)). A second replica gets its own empty rate-limit table and, unless it shares the SQLite file, an empty database. One instance handles a few thousand users.
 
 ---
 
@@ -31,38 +27,36 @@ If you are responding to a security incident, also read [`SECURITY.md`](SECURITY
 
 ## First-time setup checklist
 
-Do this once per event, ideally a week before doors open. Full platform-by-platform steps (Docker, Railway, Render, Fly.io) are in [README.md > Deploy](README.md#deploy) — this section is the critical path distilled, plus the two steps the README doesn't cover (allowlist bootstrap, and verifying the deployment identity came up).
+Once per event, ideally a week out. Per-platform detail: [README.md > Deploy](README.md#deploy).
 
 ### 1. Pick a platform and deploy
 
-Follow [README.md > Deploy](README.md#deploy) for your target:
-
 - **Docker:** `cp .env.example .env` (fill it in), `docker compose up -d`. SQLite lives in the `rideshare-data` named volume.
-- **Railway:** one-click template, set env vars in the Railway UI, attach a Volume at `/data`.
-- **Render:** **New > Blueprint** against this repo; `render.yaml` provisions the service and a 1GB disk.
+- **Railway:** one-click template, env vars in the Railway UI, Volume at `/data`.
+- **Render:** **New > Blueprint** on this repo; `render.yaml` provisions the service and a 1GB disk.
 - **Fly.io:** `fly launch`, `fly volumes create data`, `fly secrets set ...`, `fly deploy`.
 
-There is **no** `npm install` step — the app has zero runtime npm dependencies. Node ≥ 22.5 is required (`engines.node` in `package.json`); the app uses `node:sqlite`, stabilizing in that release.
+No `npm install`: zero runtime dependencies. Requires Node ≥ 22.5 (`engines.node` in `package.json`) for `node:sqlite`.
 
 ### 2. Set the required environment variables
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `APP_URL` | Yes | — | Public URL the app is served from. Also becomes the deployment's `did:web:<host>` identity — get this right before first boot, since the DID is derived from it. |
-| `SESSION_SECRET` | Yes | — | 32+ random hex bytes. Signs sessions and magic-link tokens. |
-| `ALLOWLIST_SALT` | Yes | — | 32+ random hex bytes. HMAC key for attendee email hashing. |
-| `ADMIN_EMAILS` | Yes | — | Comma-separated admin addresses. See step 4 below — this alone does not let an admin sign in. |
-| `EMAIL_FROM` | Yes | — | RFC 5322 sender, e.g. `"Rideshare <noreply@x.com>"`. |
-| `RESEND_API_KEY` | one of | — | Recommended mail transport. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | one of | — | Bring-your-own SMTP, if not using Resend. |
-| `SMTP_ALLOW_PLAINTEXT` | no | `false` | Only for a local relay with no TLS. When `SMTP_SECURE=false`, STARTTLS is required and a server that does not offer it is refused; this waives that. |
+| `APP_URL` | Yes | | Public URL. Sets the `did:web:<host>` identity; get it right before first boot. |
+| `SESSION_SECRET` | Yes | | 32+ random hex bytes. Signs sessions and magic-link tokens. |
+| `ALLOWLIST_SALT` | Yes | | 32+ random hex bytes. HMAC key for attendee email hashing. |
+| `ADMIN_EMAILS` | Yes | | Comma-separated. Not enough to sign in on its own (step 4). |
+| `EMAIL_FROM` | Yes | | RFC 5322 sender, e.g. `"Rideshare <noreply@x.com>"`. |
+| `RESEND_API_KEY` | one of | | Recommended mail transport. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | one of | | Your own SMTP instead of Resend. |
+| `SMTP_ALLOW_PLAINTEXT` | no | `false` | Local relay without TLS only. With `SMTP_SECURE=false`, STARTTLS is otherwise required. |
 | `PORT` | no | `3000` | |
-| `DATABASE_PATH` | no | `./data/app.db` (`/data/app.db` in the Docker volume) | SQLite file location. |
-| `TRUST_PROXY` | no | `false` | Set `true` behind any reverse proxy / platform edge (Railway, Render, Fly all need this). The client address comes from the last `X-Forwarded-For` hop, which assumes one proxy in front. Left `false` behind a proxy, every visitor shares one per-IP rate-limit bucket — the server warns once when it first sees the header. |
-| `MAGIC_LINK_RATE_LIMIT` | no | `5` | Max sign-in emails per address per hour (in-memory; see the single-instance warning above). |
+| `DATABASE_PATH` | no | `./data/app.db` (`/data/app.db` in Docker) | SQLite file. |
+| `TRUST_PROXY` | no | `false` | `true` behind any proxy/edge (Railway, Render, Fly). Uses the last `X-Forwarded-For` hop (one proxy). Left `false` behind a proxy, everyone shares one per-IP bucket (server warns once). |
+| `MAGIC_LINK_RATE_LIMIT` | no | `5` | Sign-in emails per address per hour (in-memory). |
 | `SESSION_LIFETIME_DAYS` | no | `14` | Session cookie lifetime. |
 
-`config.js` exits at boot with a clear error naming the first missing required var — if the process won't start, check its stderr before anything else.
+`config.js` exits at boot naming the first missing required var. If the process won't start, read stderr first.
 
 ### 3. Fill in `event.config.yaml`
 
@@ -70,17 +64,15 @@ There is **no** `npm install` step — the app has zero runtime npm dependencies
 cp event.config.example.yaml event.config.yaml
 ```
 
-The example is the tracked file; your copy is gitignored, so configuring an event does not leave a dirty working tree and an upgrade cannot conflict on it. If `event.config.yaml` is absent the app boots from the example and warns on every start — which means placeholder text like "Your Event" is reaching attendees.
+- Gitignored, so upgrades can't conflict on it. If missing, the app uses the example and warns each start (attendees see "Your Event").
+- Validated at boot; bad fields stop the process, listed by path.
+- Public config: event name, dates, venues, airports, map style, meetup pins. Most fields editable live at `/admin/config`. Schema: [README.md > Configuration](README.md#configuration).
 
-The config is validated at boot. A missing, misspelled or malformed field stops the process and names every problem at once, by path, rather than failing later inside a page render.
+### 4. Bootstrap the admin allowlist
 
-Event name, dates, venues, airports, default map style, meetup pins. This is the public-facing config — attendees can read it as part of the source-readability promise. Most fields are also editable live via `/admin/config` without a restart. Full schema and example: [README.md > Configuration](README.md#configuration).
+`ADMIN_EMAILS` only authorizes `/admin` after sign-in. Sign-in needs the allowlist (`lib/auth.js` checks `isAllowed(email)`, no admin bypass), which starts empty. Seed it from the CLI.
 
-### 4. Bootstrap the admin allowlist (required, not covered by `ADMIN_EMAILS` alone)
-
-`ADMIN_EMAILS` only controls what `/admin` *authorizes once signed in*. Signing in at all still requires being on the attendee allowlist (`lib/auth.js` checks `isAllowed(email)` before issuing a magic link, with no admin bypass). On a brand-new deployment the allowlist is empty, so the admin can't receive their own first link, and there is no admin UI yet to fix that — because reaching it requires already being signed in.
-
-Import from the repo root, after `.env` is in place and the process has a database at `DATABASE_PATH`. A one-line CSV is enough to break the deadlock:
+From the repo root, with `.env` in place and a database at `DATABASE_PATH`:
 
 ```bash
 printf 'email\nyou@example.com\n' > admins.csv
@@ -95,25 +87,30 @@ Appended to the allowlist from /srv/rideshare/admins.csv
   total   1 entries now on the allowlist
 ```
 
-This is the same import path as the `/admin/allowlist` UI (`lib/allowlist.js#importAllowlistCsv`): the address is normalized and only its HMAC is stored (`ALLOWLIST_SALT`-keyed, via `lib/crypto.js`), never the raw email, and an `allowlist.append` row goes to `audit_log`. Add every address in `ADMIN_EMAILS` in one file. After this, each admin signs in normally and the web UI is sufficient from then on.
-
-Delete the CSV afterwards — it is a plaintext list of addresses, and nothing reads it again.
+- Same path as `/admin/allowlist` (`lib/allowlist.js#importAllowlistCsv`): stores only the `ALLOWLIST_SALT` HMAC (`lib/crypto.js`), logs `allowlist.append` to `audit_log`.
+- Include every `ADMIN_EMAILS` address. Then delete the CSV (plaintext addresses).
 
 ### 5. Import the attendee allowlist
 
-Three ways in, all the same code path and all storing only HMACs:
+All three use the same code and store only HMACs:
 
-| | When to use it |
+| Method | When |
 |---|---|
-| `npm run allowlist:import -- list.csv` | Bulk load from a terminal or a deploy script. Re-runnable; `--append` adds without clearing. Default is replace, matching the admin form. |
-| `allowlist.csv` in the project root | Seeded automatically on first boot, and only when the allowlist is empty — so it cannot undo later admin edits. Convenient for a bare-metal deploy; the file is gitignored. **Not available in Docker**: `.dockerignore` excludes `allowlist*` and `*.csv` so attendee addresses are never baked into an image. Use the CLI against the running container instead. |
-| `/admin/allowlist` | Sign in as admin, paste or upload a CSV, choose **Replace** or **Append**. |
+| `npm run allowlist:import -- list.csv` | Terminal or deploy script. Default replaces; `--append` adds. |
+| `allowlist.csv` in the project root | Seeded on first boot only if the allowlist is empty. Gitignored. **Not in Docker**: `.dockerignore` excludes `allowlist*` and `*.csv`; use the CLI against the container. |
+| `/admin/allowlist` | Paste or upload, choose **Replace** or **Append**. |
 
-The CSV is a single email column, or any multi-column file with an `email` header. Invalid rows are counted and skipped rather than failing the import. Details: [README.md > Importing attendees](README.md#importing-attendees).
+CSV: one email column, or any file with an `email` header. Invalid rows are skipped and counted. See [README.md > Importing attendees](README.md#importing-attendees).
 
 ### 6. Confirm the deployment identity came up
 
-The deployment generates its own Ed25519 signing key on first boot and derives a `did:web:<host-of-APP_URL>` identity from it. The private key is a file at `DEPLOYMENT_KEY_PATH`, outside the database, so it is not in a `npm run backup` dump — back it up separately, together with its siblings `DEPLOYMENT_KEY_PATH.es256` (signs SD-JWT VCs and OpenID4VP requests) and `DEPLOYMENT_KEY_PATH.x25519` (DIDComm key agreement). (An older release kept it in the `signing_keys` table; `lib/keys.js` migrates that row out to the file on first boot and clears it.) Verify both the health check and the DID document:
+First boot generates an Ed25519 key and a `did:web:<host-of-APP_URL>` identity. Key files are outside the DB and **not** in `npm run backup`; back them up separately:
+
+- `DEPLOYMENT_KEY_PATH`: Ed25519 signing key.
+- `DEPLOYMENT_KEY_PATH.es256`: signs SD-JWT VCs and OpenID4VP requests.
+- `DEPLOYMENT_KEY_PATH.x25519`: DIDComm key agreement.
+
+(Older releases kept the key in the `signing_keys` table; `lib/keys.js` moves it to the file on first boot and clears the row.)
 
 ```bash
 curl -fsS https://$APP_URL/health | jq .
@@ -122,9 +119,9 @@ curl -fsS https://$APP_URL/health | jq .
 curl -fsS https://$APP_URL/.well-known/did.json | jq .
 ```
 
-If `signingKey` is `false` or the DID document 500s, the keypair failed to generate or load — check logs for `[trust]` and `[keys]` lines and confirm the DB and the key path are writable.
+If `signingKey` is `false` or `did.json` 500s, check logs for `[trust]` and `[keys]` and make sure the DB and key path are writable.
 
-**Changing `APP_URL` after first boot is a breaking change and the server now refuses to start.** The DID is pinned into the key file when the key is generated, so a deployment that moves host would otherwise keep issuing credentials whose `iss` document lives at the old address — unverifiable at every other deployment, with no error visible locally. Startup fails naming both the stored DID and the one `APP_URL` implies. To move host deliberately, adopt a new identity: move the key file aside and clear the `deployment_identity` row. Credentials issued under the old DID stay verifiable only for as long as the old host serves its `/.well-known/did.json`.
+**Changing `APP_URL` after first boot blocks startup** (the DID is pinned in the key file; the error names both DIDs). To move host: move the key file aside and clear the `deployment_identity` row. Old credentials verify only while the old host serves `/.well-known/did.json`.
 
 ### 7. Smoke-test
 
@@ -137,54 +134,56 @@ curl -fsS https://$APP_URL/health              # { "status": "ok", ... }
 
 ## Daily checks during the event
 
-Five minutes a day. Skipping these is fine for a one-day event; do them daily for a multi-day one.
+Five minutes a day for multi-day events; optional for one-day.
 
-- `curl -fsS https://$APP_URL/health` returns `{"status":"ok",...}` (200). A `503` means `db` or `signingKey` failed — see the check above.
-- `sqlite3 $DATABASE_PATH "SELECT count(*) FROM audit_log WHERE created_at > (unixepoch('now','-1 day')*1000);"` is non-zero (people are using it). `audit_log.created_at` is stored as epoch-milliseconds, not a SQLite datetime string.
-- Tail logs for error-level lines — command depends on platform:
-  - **Docker:** `docker logs -f --since 1h <container>` (or `docker compose logs -f`).
-  - **Railway:** `railway logs`, or the Logs tab in the dashboard.
-  - **Render:** the service's Logs tab, or `render logs` if you have the CLI linked.
-  - **Fly.io:** `fly logs`.
-- Glance at `/admin/insights.csv` (or the `/admin` dashboard) for failed-magic-link rate spikes.
+- `curl -fsS https://$APP_URL/health` returns 200 `{"status":"ok",...}`. `503` means `db` or `signingKey` failed (see setup step 6).
+- Activity in the last day is non-zero (`created_at` is epoch ms):
+  `sqlite3 $DATABASE_PATH "SELECT count(*) FROM audit_log WHERE created_at > (unixepoch('now','-1 day')*1000);"`
+- Scan logs for errors:
+  - **Docker:** `docker logs -f --since 1h <container>` (or `docker compose logs -f`)
+  - **Railway:** `railway logs`, or the Logs tab
+  - **Render:** Logs tab, or `render logs` with the CLI linked
+  - **Fly.io:** `fly logs`
+- Check `/admin/insights.csv` (or `/admin`) for failed-magic-link spikes.
 
 ---
 
 ## Backup procedure
 
-The only stateful artifact is the SQLite file at `config.databasePath` — `$DATABASE_PATH`, defaulting to `./data/app.db` locally or `/data/app.db` inside the Docker volume — plus its WAL/SHM siblings (`app.db-wal`, `app.db-shm`) while the server is running.
+State is the SQLite file at `config.databasePath` (`$DATABASE_PATH`: `./data/app.db` locally, `/data/app.db` in Docker), plus `app.db-wal` and `app.db-shm` while running.
 
 ### Take a backup
 
-The repo ships `scripts/backup.mjs`, which is the maintained way to do this: it uses SQLite's `VACUUM INTO` for a consistent online snapshot (no `sqlite3` binary dependency, safe with the server running), verifies the copy with `PRAGMA integrity_check`, and prunes old snapshots.
+Use `scripts/backup.mjs`: `VACUUM INTO` snapshot (safe while running, no `sqlite3` binary), `PRAGMA integrity_check` on the copy, prunes old snapshots.
 
 ```bash
 node scripts/backup.mjs
 # writes backups/app-<UTC timestamp>.db, prints its size once verified
 ```
 
-Environment overrides: `DATABASE_PATH` (source, same var the app itself reads), `BACKUP_DIR` (default `./backups`), `RETENTION_DAYS` (default 30, `0` disables pruning). Exit code `0` means written and verified; `1` means the backup failed outright (don't trust a `0`-byte or missing output file as success — check the exit code).
+- Env: `DATABASE_PATH` (source), `BACKUP_DIR` (default `./backups`), `RETENTION_DAYS` (default 30, `0` disables pruning).
+- Exit `0` = written and verified, `1` = failed. Check the exit code, not the file.
 
-If you'd rather not run the script (e.g. a quick one-off on a host without Node handy but with the `sqlite3` CLI):
+Without Node, using the `sqlite3` CLI:
 
 ```bash
 sqlite3 $DATABASE_PATH ".backup './backups/app-$(date -u +%Y%m%dT%H%M%SZ).db'"
 ```
 
-For Docker volumes specifically, a filesystem-level tar of the volume also works:
+Docker volume tarball:
 
 ```bash
 docker run --rm -v rideshare-data:/data -v $PWD:/out alpine \
   tar czf /out/backup.tgz /data
 ```
 
-Move backups off-host to encrypted storage. Do **not** commit them to git.
+Move backups off-host to encrypted storage. Never commit them.
 
-A snapshot holds attendee email addresses (`users`, `magic_links`, `audit_log`) but **not** the deployment signing key, which lives in the file at `DEPLOYMENT_KEY_PATH` — see [Deployment key rotation](#deployment-key-rotation) for how to back that up separately.
+Snapshots hold attendee emails (`users`, `magic_links`, `audit_log`), **not** the key at `DEPLOYMENT_KEY_PATH` (see [Deployment key rotation](#deployment-key-rotation)).
 
 ### Restore a backup
 
-Stop the running instance, replace the live file with the backup, restart — command depends on platform:
+Stop, replace the file, restart:
 
 ```bash
 # Docker
@@ -200,20 +199,18 @@ docker compose up -d
 
 ### Verify integrity after restore
 
-There is no hash-chain audit verifier yet — `docs/security/audit-tampering.md` describes one as a planned v2, not something that exists today. The real, current check is structural only:
+No hash-chain verifier yet (planned v2, `docs/security/audit-tampering.md`). Structural check only:
 
 ```bash
 sqlite3 data/app.db "PRAGMA integrity_check;"            # expect: ok
 sqlite3 data/app.db "SELECT count(*) FROM audit_log;"    # cross-check against your pre-restore count
 ```
 
-`scripts/backup.mjs` already runs `PRAGMA integrity_check` on the snapshot at backup time, so a backup it wrote and verified is trustworthy going in — this step is about confirming the *restored* file matches, not re-litigating the backup.
-
 ### Backup cadence
 
-- Hourly during the event (cron `node scripts/backup.mjs`, or your platform's own scheduled-job feature).
-- One archival backup at end-of-day, moved off-host to encrypted storage.
-- Wipe all backups within 30 days of the post-event wipe (see [Post-event wipe](#post-event-wipe)) — or just leave `RETENTION_DAYS` at its default of 30 and let the script prune for you, then delete the `backups/` directory itself at wipe time.
+- Hourly during the event (cron `node scripts/backup.mjs` or a platform scheduled job).
+- One end-of-day archive, off-host, encrypted.
+- Delete all backups within 30 days of the [Post-event wipe](#post-event-wipe) (default `RETENTION_DAYS=30` prunes; delete `backups/` at wipe).
 
 ---
 
@@ -221,127 +218,112 @@ sqlite3 data/app.db "SELECT count(*) FROM audit_log;"    # cross-check against y
 
 ### Magic-link emails not sending
 
-**Symptom:** attendees report no email after submitting their address; `/admin/insights.csv` shows magic-link issuance OK but delivery confirmations missing.
+**Symptom:** no email arrives; `/admin/insights.csv` shows issuance OK but no delivery confirmations.
 
-**Triage steps:**
+**Triage:**
 
-1. Tail logs for `mail` (see [Daily checks](#daily-checks-during-the-event) for the per-platform log command) — `grep -i mail`.
-2. Look for HTTP 4xx/5xx from the mail provider in those logs.
-3. Check provider quota (Resend dashboard, or your SMTP provider's status page).
-4. Confirm the `EMAIL_FROM` domain has SPF + DKIM configured. Many providers silently drop misconfigured senders.
-5. Verify outbound connectivity from the instance, e.g. `curl -v https://api.resend.com`.
-6. If the provider itself is down, switch credentials (`RESEND_API_KEY` or the `SMTP_*` vars) in your platform's env var UI and restart/redeploy.
+1. Grep logs for `mail` (log commands under [Daily checks](#daily-checks-during-the-event)).
+2. Look for 4xx/5xx from the mail provider.
+3. Check provider quota (Resend dashboard or SMTP status page).
+4. Confirm SPF and DKIM on the `EMAIL_FROM` domain. Providers often drop misconfigured senders silently.
+5. Test egress: `curl -v https://api.resend.com`.
+6. Provider down: switch `RESEND_API_KEY` or `SMTP_*` in the platform env UI and restart.
 
 **Remediation:**
 
-- If it's a provider outage, post a notice via `/admin/banner` (site-wide banner, `info`/`warning` severity) so attendees know to wait, rather than retrying and hitting the rate limit.
-- If it was misconfiguration, fix it, then clear the stale unused links so nobody uses one you've since fixed the cause of:
+- Outage: post an `info`/`warning` banner at `/admin/banner` so people wait instead of hitting the rate limit.
+- Misconfiguration: fix it, then delete unused links older than 15 minutes (`created_at` is epoch ms):
   ```bash
   sqlite3 $DATABASE_PATH "DELETE FROM magic_links WHERE used_at IS NULL AND created_at < (unixepoch()*1000 - 900000);"
   ```
-  (`created_at`/`expires_at` are epoch-milliseconds; the above is "older than 15 minutes.")
 
 ### User can't sign in
 
-**Symptom:** an attendee says they entered their email and never received a link, *and* the mail system is fine.
+**Symptom:** one attendee gets no link, mail is otherwise fine.
 
-**Triage steps:**
-
-1. Confirm they're on the allowlist: sign in as admin, go to `/admin/allowlist`, use the "check a single email" form (rate-limited and audited — logs an `allowlist.check` style entry either way).
-2. If not on it: add them via `/admin/allowlist` (Append mode so you don't wipe everyone else), then have them retry sign-in themselves. There is no admin-triggered "send them a link" or "issue a one-time link" action — the attendee has to submit their own email again once they're allowed.
-3. If they are on it: they're likely rate-limited (`MAGIC_LINK_RATE_LIMIT`, default 5/hour per email, plus a hardcoded 30/hour per IP). Rate-limit state is an in-memory `Map` inside the running process — there's no table to query or a targeted row to delete. Your options are: wait out the window, or restart the process, which clears **every** bucket for **every** user, not just this one. Prefer waiting unless the event is actively blocked on it.
-4. Ask them to check spam, including any corporate quarantine.
+1. Check the allowlist: `/admin/allowlist`, "check a single email" form (rate-limited, audited as an `allowlist.check`-style entry).
+2. Not listed: add them in **Append** mode, then have them resubmit. There is no admin "send link" action.
+3. Listed: likely rate-limited (`MAGIC_LINK_RATE_LIMIT`, default 5/hour per email; 30/hour per IP, hardcoded). Limits live in an in-memory `Map`. Wait, or restart (clears **every** bucket for everyone). Prefer waiting.
+4. Ask them to check spam and corporate quarantine.
 
 ### Admin lockout
 
-**Symptom:** the only admin email is unreachable (e.g. their company SSO is broken and they can't get email).
+**Symptom:** the only admin can't receive email.
 
-**Recovery:**
+Admin status is `ADMIN_EMAILS`, checked per request; no DB-side escalation path. The address must also be on the allowlist ([setup step 4](#4-bootstrap-the-admin-allowlist)).
 
-Admin status comes from the `ADMIN_EMAILS` env var, checked at request time — there's no DB-side privilege escalation route. But being in `ADMIN_EMAILS` is not sufficient to sign in; the address must also be on the attendee allowlist (see [step 4 of First-time setup](#4-bootstrap-the-admin-allowlist-required-not-covered-by-admin_emails-alone)).
+1. Add the new admin to `ADMIN_EMAILS` in the platform env UI and restart.
+2. Make sure they're on the allowlist: run the [step 4](#4-bootstrap-the-admin-allowlist) import, or use `/admin/allowlist` if another admin has access.
+3. New admin signs in via magic link.
 
-1. Add the new admin's email to `ADMIN_EMAILS` in your platform's env var UI, and restart/redeploy.
-2. Confirm that email is also on the allowlist — if not, run the same `appendAllowlist` one-liner from [step 4 above](#4-bootstrap-the-admin-allowlist-required-not-covered-by-admin_emails-alone), or add it via `/admin/allowlist` if another admin still has access.
-3. The new admin signs in via the normal magic-link flow.
-
-If no admin can receive email at all, you have a mail-delivery incident, not an admin-lockout one — see [Magic-link emails not sending](#magic-link-emails-not-sending).
+If no admin can get email at all, see [Magic-link emails not sending](#magic-link-emails-not-sending).
 
 ### DB corruption
 
-**Symptom:** `PRAGMA integrity_check;` returns anything other than `ok`, or logs show `SQLITE_CORRUPT`.
+**Symptom:** `PRAGMA integrity_check;` returns anything but `ok`, or logs show `SQLITE_CORRUPT`.
 
-**Recovery:**
-
-1. Stop the instance (platform-specific — see [Restore a backup](#restore-a-backup)).
-2. Move the corrupt file aside: `mv data/app.db data/app.db.corrupt-$(date +%s)` (and its `-wal`/`-shm` siblings).
-3. Restore the most recent backup (see [Restore a backup](#restore-a-backup)).
-4. Run `PRAGMA integrity_check;` plus the `audit_log` row-count cross-check — there's no hash-chain verifier yet (see [Backup procedure](#backup-procedure)).
-5. Restart/redeploy.
-6. **Communicate.** Anyone who signed up or bound a DID between the backup and the corruption is gone from the restored DB — the only record of that binding was in `audit_log` and `user_dids`, and you can't distinguish "new attendee" from "lost attendee" after the fact. Post the cutoff time via `/admin/banner`.
+1. Stop the instance (see [Restore a backup](#restore-a-backup)).
+2. Move it aside: `mv data/app.db data/app.db.corrupt-$(date +%s)` (plus `-wal`/`-shm`).
+3. Restore the latest backup ([Restore a backup](#restore-a-backup)).
+4. Run `PRAGMA integrity_check;` and the `audit_log` row-count cross-check (no hash-chain verifier; see [Backup procedure](#backup-procedure)).
+5. Restart.
+6. **Communicate.** Sign-ups and DID bindings since the backup are lost (only in `audit_log` and `user_dids`) and indistinguishable from new users. Post the cutoff time via `/admin/banner`.
 
 ### Deployment key rotation
 
-**Rotation is destructive and there is no transition window.** Treat this as a known limitation, not a to-do.
+**Destructive, with no transition window.** Known limitation.
 
-The deployment has exactly one Ed25519 signing key, held in the file named by `DEPLOYMENT_KEY_PATH` (default `secrets/deployment.key`, mode 0600, created on first boot — `lib/keys.js`). The `/.well-known/did.json` document (`getDeploymentDidDocument()` in `lib/trust.js`) publishes exactly one verification method for it, so there is no way to publish an old key alongside a new one while both remain verifiable.
+- One Ed25519 key, in the file at `DEPLOYMENT_KEY_PATH` (default `secrets/deployment.key`, mode 0600, created on first boot by `lib/keys.js`).
+- `/.well-known/did.json` (`getDeploymentDidDocument()` in `lib/trust.js`) publishes one verification method, so old and new keys can't both verify.
+- Replacing the key permanently invalidates every credential ever issued. No rollback.
 
-Consequence: replacing the key makes every Verifiable Credential this deployment has ever issued permanently unverifiable, with no rollback. Anyone holding a credential from before the rotation loses it for good.
+Upgrades keep the key: `lib/keys.js` moves it from `signing_keys` to the file; the DID is unchanged. If the write fails it aborts with the DB untouched; fix the path and restart.
 
-A deployment upgraded from an older version keeps its original key: on first boot `lib/keys.js` moves the row out of the `signing_keys` table into the key file and deletes it from the database. Nothing is re-generated, and the published DID does not change. If that migration cannot write the file it aborts and leaves the database untouched, so a failed upgrade is recoverable by fixing the path and restarting.
-
-If you are facing an actual key-compromise scenario and decide rotation is still the lesser evil:
+Only on confirmed key compromise:
 
 1. Stop the instance.
-2. Delete the key file **and** the `deployment_identity` row (`DELETE FROM deployment_identity WHERE id = 1`). The row is the integrity check: leaving it in place makes the server refuse to start with a key that does not match the one it published.
-3. Restart. A new keypair is generated and `/.well-known/did.json` republishes with the new public key.
-
-Every previously issued credential becomes unverifiable the moment you do this — there is no "both keys valid" transition available.
+2. Delete the key file **and** the identity row: `DELETE FROM deployment_identity WHERE id = 1`. Leaving the row makes the server refuse to start with a mismatched key.
+3. Restart. A new keypair is generated and `/.well-known/did.json` republishes.
 
 ### The key is not in the backup
 
-`scripts/backup.mjs` copies the SQLite file only, so a snapshot carries no issuer key material; it prints a warning if it finds a pre-migration key row still in the database. That means a restore alone does not restore the ability to sign: back the key file up separately, encrypted (age, KMS, or your platform's secret store), and restore it alongside the database.
+`scripts/backup.mjs` copies only the SQLite file (warns if a pre-migration key row remains). Back up the key file separately, encrypted (age, KMS, or platform secret store), and restore it with the DB.
 
-Recommendation: don't, outside of confirmed key compromise. For a routine end-of-event situation, just proceed to [Post-event wipe](#post-event-wipe) instead — the key dies with the database.
+At end of event don't rotate; do the [Post-event wipe](#post-event-wipe).
 
 ### SSL cert renewal
 
-The app does not handle TLS. Cert renewal is your edge proxy's or platform's job.
+The app doesn't do TLS; your proxy or platform does.
 
-- **Docker, fronted by your own proxy:** Caddy auto-renews; nginx with certbot needs a renewal cron; document which one you're using.
-- **Railway / Render / Fly.io:** TLS for the platform-provided domain is automatic and managed by the platform. If you've attached a custom domain, each platform's dashboard shows the cert status — check it once, then it's generally set-and-forget.
-- **Cloudflare in front of any of the above:** automatic; just monitor the origin cert if you're also terminating TLS at origin.
+- **Docker behind your own proxy:** Caddy auto-renews; nginx + certbot needs a renewal cron. Note which you use.
+- **Railway / Render / Fly.io:** automatic for platform domains. For a custom domain, check cert status in the dashboard once.
+- **Cloudflare in front:** automatic; watch the origin cert if you also terminate TLS at origin.
 
 ---
 
 ## Monitoring
 
-Per-metric, what to watch and what's abnormal:
-
-| Metric | Source | Alert threshold |
+| Metric | Source | Alert when |
 | --- | --- | --- |
-| Failed magic-link issuance rate | `audit_log` table, relevant `action` values | sudden spike → investigate provider |
-| Magic-link delivery latency (issue → use) | `magic_links.used_at - created_at` | p95 consistently high → mail provider degraded |
-| Credential issuance failures | logs, trust/credential errors | any → investigate immediately |
-| `/health` failure | external probe | 2 consecutive `503`s → page operator |
-| Process restarts | platform's own restart/crash metric | > 1/hour → investigate |
-| DB file size | `du -h $DATABASE_PATH` | growth > 100MB/day → unusual; investigate |
-| Rate-limiter bucket count | logs: `[rate-limit] bucket count=N`, emitted every 5 minutes | sustained growth without a cleanup drop → possible scanning/abuse |
+| Failed magic-link issuance | `audit_log` `action` values | sudden spike (check provider) |
+| Link latency (issue → use) | `magic_links.used_at - created_at` | p95 stays high (provider degraded) |
+| Credential issuance failures | logs, trust/credential errors | any |
+| `/health` | external probe | 2 consecutive `503`s: page operator |
+| Process restarts | platform metric | > 1/hour |
+| DB file size | `du -h $DATABASE_PATH` | > 100MB/day growth |
+| Rate-limiter buckets | log `[rate-limit] bucket count=N`, every 5 min | sustained growth, no cleanup drop (scanning/abuse) |
 
-**No SQL table to query for rate limiting.** The limiter (`lib/rate-limit.js`) is an in-memory `Map`, single-process, with no `rate_limits` table — the bucket-count log line above is the only visibility into it, and the only reset is a full process restart (see [User can't sign in](#user-cant-sign-in)). This is also the single-instance constraint called out at the top of this runbook: a second replica would get its own, separate rate-limit state.
-
-The audit trail lives in the `audit_log` table (not `audit`).
-
-Minimal monitoring stack: a cron or uptime service hitting `/health`, plus whatever log aggregation your platform offers. For one-day events a phone alarm checking `/health` is fine.
+- Limiter (`lib/rate-limit.js`): in-memory `Map`, no `rate_limits` table. The log line is the only visibility; restart the only reset.
+- Audit table is `audit_log` (not `audit`).
+- Minimum: uptime check on `/health` plus platform logs.
 
 ---
 
 ## Post-event wipe
 
-**Mandatory.** This is a privacy commitment to attendees, not a suggestion.
+**Mandatory** privacy commitment. Within 30 days of the event; sooner is better.
 
-Run within 30 days of the event ending. Sooner is better.
-
-The only real artifact to destroy is the SQLite file at `$DATABASE_PATH` and its WAL/SHM siblings, plus any backups you've taken.
+Destroy the SQLite file at `$DATABASE_PATH`, its WAL/SHM files, and all backups.
 
 ### Self-hosted (Docker on your own VM, or anywhere you hold the filesystem)
 
@@ -362,38 +344,36 @@ rmdir backups 2>/dev/null
 # 5. Tell attendees you're done.
 ```
 
-If the volume is a named Docker volume rather than a bind mount, remove the volume itself after wiping its contents: `docker volume rm rideshare-data`.
+For a named volume (not a bind mount), also run `docker volume rm rideshare-data`.
 
 ### Platform-managed (Railway / Render / Fly.io)
 
-These platforms manage the underlying disk for you — there is no filesystem to `shred`. Wiping means deleting the **volume** and the **service** through that platform's own dashboard or CLI (e.g. `fly volumes destroy`, or the Railway/Render dashboard's delete-volume and delete-service actions). Do this rather than trying to reach the disk directly; the managed volume may outlive a deleted service otherwise.
+No filesystem to `shred`. Delete the **volume** and the **service** via the platform (e.g. `fly volumes destroy`, or Railway/Render delete-volume and delete-service). Delete the volume explicitly; it can outlive the service.
 
-In both cases:
+Either way, if you still have filesystem access, this should print nothing:
 
 ```bash
 # Verify nothing remains, if you still have filesystem access:
 find . -name 'app.db*' 2>/dev/null
 ```
 
-Should print nothing once the volume/service is actually gone.
-
 ---
 
 ## Migrations
 
-The schema is bootstrapped on first start by `lib/db.js`: a single `db.exec()` block with `CREATE TABLE IF NOT EXISTS` for every table. There is no separate migrations directory or script runner — additive schema changes live inline in `lib/db.js`, wrapped through `tryExec()`:
+`lib/db.js` bootstraps the schema on start with one `db.exec()` of `CREATE TABLE IF NOT EXISTS`. No migrations directory or runner. Additive changes go inline via `tryExec()`:
 
 ```js
 tryExec("ALTER TABLE rides ADD COLUMN pickup_lat REAL");
 ```
 
-`tryExec()` swallows "duplicate column" / "already exists" errors so the same `ALTER` is safe to run again on an already-migrated DB, and rethrows anything else. This is how new columns get added without a migration framework: the block runs on every boot, and is a no-op past the first time.
+`tryExec()` ignores "duplicate column" / "already exists" and rethrows the rest, so reruns are no-ops.
 
-For non-additive changes (rename, drop, type change) there is no tooling at all today — this pattern only covers additive changes. If you ever need one:
+Non-additive changes (rename, drop, type change) have no tooling. By hand:
 
-1. Take a backup (`node scripts/backup.mjs`).
+1. Back up (`node scripts/backup.mjs`).
 2. Stop the server.
-3. Apply it by hand, inside a transaction, following the existing inline style in `lib/db.js` rather than adding a separate script:
+3. Apply in a transaction, following the inline style in `lib/db.js` (no separate script):
    ```sql
    BEGIN;
    ALTER TABLE rides RENAME TO rides_v1;
@@ -405,17 +385,15 @@ For non-additive changes (rename, drop, type change) there is no tooling at all 
 4. Run `PRAGMA integrity_check;`.
 5. Restart.
 
-We deliberately avoid an ORM-style migration framework. Schema changes are short, hand-written, and reviewable in the diff that introduces them.
+No migration framework, on purpose: changes stay short and reviewable in the diff.
 
 ---
 
 ## Updating the deployment
 
-> **One-time, when upgrading across the release that untracked `event.config.yaml`.**
-> That file used to be tracked. The commit removing it from the index will delete
-> an unmodified copy on `git pull`. The app still boots — it falls back to
-> `event.config.example.yaml` and warns — but it would serve placeholder text to
-> attendees. Copy it aside first and put it back:
+> **One-time, when upgrading past the release that untracked `event.config.yaml`.**
+> `git pull` deletes an unmodified tracked copy. The app then falls back to
+> `event.config.example.yaml` and serves placeholder text. Save it first:
 >
 > ```bash
 > cp event.config.yaml /tmp/event.config.yaml.keep   # before the pull
@@ -423,9 +401,9 @@ We deliberately avoid an ORM-style migration framework. Schema changes are short
 > cp /tmp/event.config.yaml.keep event.config.yaml   # after
 > ```
 >
-> From then on it is gitignored and no pull touches it again.
+> After that it's gitignored.
 
-For an additive update (no schema break, no new required env vars), per platform:
+Additive update (no schema break, no new required env vars):
 
 ```bash
 # Docker
@@ -442,18 +420,17 @@ git push   # if deploying from a connected repo, this triggers a redeploy automa
 fly deploy
 ```
 
-Run `npm test` locally before pushing/deploying either way.
+Run `npm test` locally first.
 
-For an update with schema changes: take a backup first, then follow [Migrations](#migrations) — in this codebase that almost always just means the new `tryExec()` block ships as part of the same deploy, since additive changes apply automatically at boot.
-
-For an update with new env vars: set them in your platform's env var UI *before* the restart/redeploy that needs them, then deploy. Document the change in your event's local notes so the next operator knows.
+- **Schema changes:** back up, then see [Migrations](#migrations). Usually the new `tryExec()` ships in the same deploy and applies at boot.
+- **New env vars:** set them in the platform UI before the deploy that needs them. Note it in your event's local notes for the next operator.
 
 ---
 
 ## See also
 
-- [`SECURITY.md`](SECURITY.md) — disclosure policy, defense layers.
-- [`THREAT_MODEL.md`](THREAT_MODEL.md) — what we model.
-- [`TRUST.md`](TRUST.md) — DID + VC architecture.
-- [`BUILD.md`](BUILD.md) — reproducible-build verification.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — for operators who patch in their own changes.
+- [`SECURITY.md`](SECURITY.md): disclosure policy, defense layers.
+- [`THREAT_MODEL.md`](THREAT_MODEL.md): what we model.
+- [`TRUST.md`](TRUST.md): DID + VC architecture.
+- [`BUILD.md`](BUILD.md): reproducible-build verification.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): for operators patching in their own changes.

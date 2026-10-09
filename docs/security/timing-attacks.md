@@ -1,114 +1,87 @@
 # Timing attacks
 
-> How **rideshare** defends against timing side channels on auth and allowlist endpoints. Audience: reviewers checking the constant-time properties of comparison operations.
+Timing side channels on **rideshare** sign-in.
 
-The two endpoints that matter:
+Two endpoints matter:
 
-1. **Sign-in submission** (`POST /auth/sign-in`) — leaks "is this email on the allowlist?" if not careful.
-2. **Magic-link consumption** (`GET /auth/link/:token`) — leaks "is this token valid?" if not careful.
+| Endpoint | Could leak |
+|---|---|
+| `POST /auth/send` (request a link) | whether an email is on the allowlist |
+| `GET /auth/callback?token=` (use a link) | whether a token is valid |
 
-We defend with a combination of:
-
-- Constant-time comparisons.
-- Identical response shapes regardless of outcome.
-- Artificial random delays sized to dominate the real timing distribution.
-- Rate limits that cap how many samples an attacker can collect.
+Defenses: the sign-in response doesn't wait on any allowlist work, secrets are compared via HMAC or `safeEqual`, and rate limits cap sampling.
 
 ---
 
-## Constant-time comparison
+## Sign-in: response decoupled from the work
 
-We use `crypto.timingSafeEqual(Buffer, Buffer)` everywhere we compare:
+`POST /auth/send` in `routes/auth.js`:
 
-- A user-submitted magic-link token to a stored token.
-- An HMAC of the user's email to a stored allowlist HMAC.
-- A session ID to a stored session row's ID.
-- A signed-challenge response (Ed25519 signature) to the expected verification result.
+1. Parses the email. Invalid input redirects to `/auth/check`.
+2. Starts `startMagicLink()` fire-and-forget.
+3. Redirects to `/auth/check`.
 
-The function returns in time independent of the position of the first differing byte. Inputs must be the same length; we enforce length equality structurally (the magic-link token is fixed-width, the HMAC output is fixed-width).
+Rate limits, allowlist check and send run after the redirect, so every outcome gets the same immediate response. Rate-limited requests return silently; no `429`.
 
-Where we *don't* use it: comparisons of trusted-vs-trusted values (e.g., comparing two configuration constants), and comparisons whose result is not security-sensitive. Code review checklist requires `timingSafeEqual` on any comparison whose left side comes from a request.
-
-### What `timingSafeEqual` does NOT solve
-
-- The time it takes to **fetch** the row from the DB. If "user not found" returns from a missing-row check faster than "user found, then comparison fails," the timing channel is open. We mitigate by always doing the full lookup-and-compare, with a sentinel HMAC value used when no row exists. See "Identical response shapes" below.
-- The time it takes to **compute** the HMAC of the submitted email. HMAC-SHA-256 over a short string is itself essentially constant-time on modern CPUs, but we still do it unconditionally before the lookup, to keep the per-request work uniform.
+The off-list path in `startMagicLink` (`lib/auth.js`) also awaits `artificialDelay()` (50-150ms jitter). The real protection is the rate limit.
 
 ---
 
-## Identical response shapes
+## Magic-link consumption
 
-For `POST /auth/sign-in`:
+`consumeMagicLink()` HMACs the submitted token with `SESSION_SECRET` and looks up `magic_links.token_hash`. No artificial delay.
 
-- Status code: `200` always.
-- Body: `If you are on the list, a link is on the way. Check your inbox in a minute.` always.
-- Headers: identical, including content-length.
+- Valid: 303 redirect to `/` with a fresh session cookie.
+- Missing, invalid, already used or expired: a `400` "That link didn't work" page with the reason.
 
-For `GET /auth/link/:token`:
-
-- A valid token redirects to `/dashboard` with a fresh session cookie.
-- An invalid token redirects to `/auth/sign-in?failed=1`.
-- An already-consumed token redirects to `/auth/sign-in?failed=1`.
-- A token whose stored row has expired redirects to `/auth/sign-in?failed=1`.
-
-The three failure modes are indistinguishable from outside.
+Reasons are distinguishable; fine, since tokens are 256 random bits, single-use, 15-minute TTL.
 
 ---
 
-## Artificial random delay
+## Comparisons
 
-In `lib/auth.js`, the sign-in handler does:
+- **Allowlist and magic-link tokens:** the submitted value is HMACed (`ALLOWLIST_SALT` / `SESSION_SECRET`) and matched by indexed SQLite equality on the hash. The attacker never sees the key, so timing on the stored hash bytes isn't useful.
+- **Signed payloads and CSRF tokens:** `safeEqual` in `lib/crypto.js` wraps `crypto.timingSafeEqual`. It compares UTF-8 byte lengths first, so mismatched input returns `false` instead of throwing. Used by `verifyPayload()` and `csrfProtected` in `lib/router.js`.
 
-```js
-await sleep(randomDelayMs())
-```
-
-Before responding, regardless of allowlist outcome.
-
-The delay is sampled from a uniform distribution over [200ms, 600ms]. The endpoint's real work (HMAC + DB lookup + magic-link generation + email enqueue) takes O(10ms) at the tail. The added delay dominates.
-
-**This is a probabilistic defense**, not a guarantee. A determined attacker who collects N requests can reduce the noise. Our backstop is the per-IP rate limit (30 requests / hour) and per-email rate limit (5 requests / hour, `MAGIC_LINK_RATE_LIMIT`). At those rates, recovering an enumeration signal would require months of probing per email — long enough that the event is over, the deployment is wiped, and the allowlist no longer exists.
-
-For the magic-link consumption endpoint, the delay is smaller (50-150ms) because the work is more uniform and the threat is replay (which is defended by the single-use property and 10-minute TTL) rather than enumeration.
+Code review requires `safeEqual` on any secret comparison whose left side comes from a request.
 
 ---
 
 ## Rate limits
 
-`lib/rate-limit.js` implements a fixed-window counter per key, in memory, reset
-by a process restart. Keys actually in use:
+`lib/rate-limit.js`: fixed-window counter per key, in memory, reset on restart.
 
-- `magic:email:<address>` — `MAGIC_LINK_RATE_LIMIT` (default 5) / hour, in `lib/auth.js`.
-- `magic:ip:<addr>` — 30 / hour, in `lib/auth.js`.
-- `admincheck:<user id>` — 30 / hour on the admin allowlist lookup, in `routes/admin.js`.
+| Key | Limit | Where |
+|---|---|---|
+| `magic:email:<address>` | `MAGIC_LINK_RATE_LIMIT` (default 5) / hour | `lib/auth.js` |
+| `magic:ip:<addr>` | 30 / hour | `lib/auth.js` |
+| `admincheck:<user id>` | 30 / hour, admin allowlist lookup | `routes/admin.js` |
 
 `POST /trust/verify` is **not** rate-limited today.
-
-Exceeding the limit returns a `429` after the same artificial delay as a normal response. The response shape doesn't reveal which limit triggered.
 
 ---
 
 ## What's still possible
 
-- **Network-level timing.** An attacker on the same network as the server can observe TCP/TLS round-trip timing more precisely than from the public internet. Local-network adversaries are rare for our deployments (cloud VMs) but the operator should not host on a shared LAN with untrusted parties.
-- **Email delivery latency.** A clever attacker who controls the recipient's email inbox can observe whether a magic-link email arrived, regardless of HTTP-level masking. Mitigation: the deployment's `MAIL_FROM` should be a domain the operator controls and the attacker doesn't.
-- **Side channels via cache eviction.** Theoretical at the scale we operate. Not modeled.
-- **Time spent in the email provider's API.** A misbehaving email provider that takes 2s for one address and 200ms for another would leak. We send the email asynchronously after responding, so provider latency does not appear in our response timing.
+- **Network-level timing.** An attacker on the server's LAN sees round trips more precisely. Rare on cloud VMs; don't host on a LAN shared with untrusted parties.
+- **Inbox observation.** Someone who controls the recipient's inbox sees whether a link arrived, regardless of HTTP masking. Keep `EMAIL_FROM` on a domain you control.
+- **Cache-eviction side channels.** Theoretical at our scale. Not modeled.
+- **Email provider latency.** Not visible: the send happens after the redirect.
 
 ---
 
 ## Where to look
 
-- `lib/auth.js` — the sign-in handler, the link consumption handler, the artificial delay.
-- `lib/allowlist.js` — the HMAC-then-`timingSafeEqual` flow.
-- `lib/rate-limit.js` — the limiter.
-- `tests/unit/rate-limit.test.js` — window and boundary behaviour. There is no
-  statistical timing test: the constant-time comparison and the artificial delay
-  are verified by reading, not by measurement.
+- `routes/auth.js`: `/auth/send` and `/auth/callback`.
+- `lib/auth.js`: `startMagicLink`, `consumeMagicLink`, `artificialDelay`.
+- `lib/allowlist.js`: `isAllowed`, the HMAC lookup.
+- `lib/crypto.js`: `safeEqual`.
+- `lib/rate-limit.js`: the limiter.
+- `tests/unit/rate-limit.test.js`: window and boundary behavior. There's no statistical timing test; the comparisons and delay are verified by reading, not measurement.
 
 ---
 
 ## See also
 
-- [`THREAT_MODEL.md`](../../THREAT_MODEL.md) — `T-A1-I1` and `CC-9: timing attacks on email auth`.
-- [`csrf.md`](csrf.md) — companion auth-flow defense.
+- [`THREAT_MODEL.md`](../../THREAT_MODEL.md): `T-A1-I1` and `CC-9: timing attacks on email auth`.
+- [`csrf.md`](csrf.md): companion auth-flow defense.
