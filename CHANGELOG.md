@@ -13,6 +13,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Link the live demo
+- Update changelog [skip ci]
 - Update changelog [skip ci]
 - Lead the README with the demo and the DID/VC design
 - Update changelog [skip ci]
