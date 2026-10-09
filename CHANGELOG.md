@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 ## [Unreleased]
 
 ### Added
+- Issue SD-JWT VCs with holder-chosen selective disclosure
+- Add a zero-dependency QR encoder
 - Add a live demo mode and repair the credential flow
 - Validate the event config at load and untrack the live one
 - Key ride confirmations and issued credentials by claim
@@ -13,6 +15,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Initial release of event rideshare platform
 
 ### Documentation
+- Update changelog [skip ci]
 - Link the live demo
 - Update changelog [skip ci]
 - Update changelog [skip ci]
