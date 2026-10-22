@@ -37,6 +37,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 - Update changelog [skip ci]
 - Update changelog [skip ci]
 - Update changelog [skip ci]
+- Update changelog [skip ci]
 - Tighten every guide, add README badges, correct claims that drifted from the code
 - Update changelog [skip ci]
 - Update changelog [skip ci]
